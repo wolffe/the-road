@@ -1,0 +1,13 @@
+{
+  "name": "car-game-multiplayer",
+  "version": "1.0.0",
+  "description": "Multiplayer car game using WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0"
+  }
+} 

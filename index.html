@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-title" content="The Road">
+    <link rel="manifest" href="/site.webmanifest">
+
+    <link rel="stylesheet" href="ui.css">
+</head>
+
+<body>
+    <div id="gameContainer">
+        <!-- Single joystick container -->
+        <div id="joystick"></div>
+    </div>
+    <div id="statusPanel">
+        <div class="stat">
+            <div>HP: <span id="hpText">100</span>/100</div>
+            <div id="hpBar">
+                <div id="hpBarFill"></div>
+            </div>
+        </div>
+        <div class="stat">
+            <div>Battery: <span id="batteryText">100</span>/100</div>
+            <div id="batteryBar">
+                <div id="batteryBarFill"></div>
+            </div>
+        </div>
+        <div class="stat">
+            <div>Fuel: <span id="fuelText">100</span>/100</div>
+            <div id="fuelBar">
+                <div id="fuelBarFill"></div>
+            </div>
+        </div>
+        <div class="stat">Speed: <span id="speedText">0</span> km/h</div>
+        <div class="stat">Position:<br>
+            X: <span id="posX">0</span><br>
+            Y: <span id="posY">0</span>
+        </div>
+        <div class="stat">Terrain: <span id="terrainText">grass</span></div>
+        <div class="stat">
+            Trunk:<br>
+            Scrap: <span id="trunkText">0</span>/<span id="maxTrunkText">500</span><br>
+            Circuits: <span id="trunkBatteryText">0</span>/<span id="maxTrunkBatteryText">500</span><br>
+            Fuel: <span id="trunkFuelText">0</span>/<span id="maxTrunkFuelText">250</span>
+        </div>
+        <div class="stat">
+            Time: <span id="timeText">12:00</span><br>
+            <span id="dayPhaseText">Noon</span>
+        </div>
+        <div class="stat">Total Time: <span id="totalTime">00:00:00</span></div>
+        <div class="stat">Total Distance: <span id="totalDistance">0.00</span> km</div>
+        <div class="stat">Lights: <span id="lightsStatus">ON</span></div>
+        <div class="stat">
+            <h3>Artifacts Collected</h3>
+            <div id="artifactsList" style="max-height: 100px; overflow-y: auto;"></div>
+        </div>
+
+        <div class="panel-section">
+            <h3>Save Game</h3>
+            <button onclick="saveGame()">Save Game</button>
+            <button onclick="eraseSave()" class="danger-button">Erase Save</button>
+        </div>
+    </div>
+
+    <div id="notifications" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
+         background: rgba(0,0,0,0.7); color: white; padding: 10px 20px; border-radius: 5px; 
+         display: none; z-index: 1000; font-family: monospace;">
+    </div>
+
+    <!-- Add Game Over overlay -->
+    <div id="gameOverOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+         background: rgba(0, 0, 0, 0.8); z-index: 2000; color: white; font-family: monospace;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+             text-align: center; background: rgba(0, 0, 0, 0.9); padding: 20px; border-radius: 10px;
+             border: 2px solid #ff0000;">
+            <h1 style="color: #ff0000; margin-bottom: 20px;">GAME OVER</h1>
+            <p id="gameOverReason" style="color: #ff6666; margin-bottom: 15px;"></p>
+            <div id="gameOverStats" style="text-align: left; margin: 20px 0; padding: 10px; 
+                 background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
+                <p>Time Played: <span id="gameOverTime"></span></p>
+                <p>Distance Traveled: <span id="gameOverDistance"></span> km</p>
+                <p>Artifacts Collected: <span id="gameOverArtifacts"></span></p>
+            </div>
+            <button onclick="restartGame()" style="background: #ff0000; color: white; border: none; 
+                    padding: 10px 20px; margin-top: 20px; cursor: pointer; border-radius: 5px;">
+                Restart Game
+            </button>
+        </div>
+    </div>
+
+    <script src="constants.js?1"></script>
+    <script src="particles.js"></script>
+    <script src="audio.js"></script>
+    <script src="multiplayer.js"></script>
+    <script>
+        const canvas = document.createElement('canvas');
+        document.getElementById('gameContainer').appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        // Disable image smoothing for crisp pixel art
+        ctx.imageSmoothingEnabled = true;
+        ctx.mozImageSmoothingEnabled = true;
+        ctx.webkitImageSmoothingEnabled = true;
+        ctx.msImageSmoothingEnabled = true;
+
+        // Set canvas size to full window minus panel width
+        function resizeCanvas() {
+            canvas.width = window.innerWidth - 240; // 200px panel + 40px padding
+            canvas.height = window.innerHeight;
+            // Ensure smoothing remains disabled after resize
+            ctx.imageSmoothingEnabled = true;
+            ctx.mozImageSmoothingEnabled = true;
+            ctx.webkitImageSmoothingEnabled = true;
+            ctx.msImageSmoothingEnabled = true;
+        }
+
+        // Initial canvas size
+        resizeCanvas();
+
+        // Handle window resize
+        window.addEventListener('resize', resizeCanvas);
+
+        // Initialize images object
+        const images = {};
+        TEXTURES.forEach(texture => {
+            images[texture.type] = new Image();
+        });
+
+        // Game state
+        const gameState = {
+            car: {
+                x: 0,  // Start at center
+                y: 0,  // Start at center
+                rotation: 0,
+                speed: 0,
+                acceleration: 0,
+                steering: 0,
+                width: 20,
+                length: 40,
+                hp: 100,
+                fuel: 100,
+                maxFuel: 100,
+                trunkFuel: 0,
+                maxTrunkFuel: 250,
+                lastFuelUse: Date.now(),
+                lastDamageTime: 0,
+                trunk: 0,
+                maxTrunk: 500,
+                lastRepairTime: 0,
+                battery: 100,
+                maxBattery: 100,
+                trunkBattery: 0,
+                maxTrunkBattery: 500,
+                lastBatteryUse: Date.now(),
+                isEngineRunning: false,
+                powerFactor: 0.08,
+                turnSpeed: 0.01,
+                grip: 0.95,
+                exhaustParticles: [],
+                handbrakeParticles: [],
+                lightsOn: true,
+                isHandbrakeOn: false,
+                wasReversing: false,
+                brakingForce: 0.03,
+                isDrifting: false,
+                turnStartTime: 0,
+                isTurning: false
+            },
+            terrain: [],
+            tireTrackHistory: [],
+            keys: {},
+            viewport: { x: 0, y: 0 },  // Will be updated in generateTerrain
+            time: {
+                current: 0.5,     // Start at noon (0.5 = 12:00)
+                speed: 0.1,
+                cycleLength: 180,
+                lastUpdate: Date.now(),
+                totalSeconds: 0
+            },
+            stats: {
+                totalDistance: 0,
+                artifactsCollected: []
+            },
+            particles: {
+                exhaust: [],
+                handbrake: [],
+                fire: [],
+                water: []
+            },
+            multiplayer: null
+        };
+
+        // Add map image to textures
+        TEXTURES.push({ type: 'map', src: 'https://cdn.glitch.global/29cd725d-6063-4944-99c6-03df924bf400/map2.png' });
+
+        // Handle keyboard input
+        window.addEventListener('keydown', (e) => {
+            gameState.keys[e.key] = true;
+
+            // Handle one-time key presses here
+            if (e.key.toLowerCase() === 'l') {
+                gameState.car.lightsOn = !gameState.car.lightsOn;
+                document.getElementById('lightsStatus').textContent = gameState.car.lightsOn ? 'ON' : 'OFF';
+            }
+        });
+        window.addEventListener('keyup', (e) => gameState.keys[e.key] = false);
+
+        // Update terrain generation to use image
+        function generateTerrain() {
+            const GAME_TILE_SIZE = 80;  // Size of tiles in the game
+
+            try {
+                const mapImage = images.map;
+                if (!mapImage || !mapImage.complete) {
+                    return;
+                }
+
+                const MAP_WIDTH = mapImage.width;
+                const MAP_HEIGHT = mapImage.height;
+
+                // Calculate the total world size based on map dimensions
+                const worldWidth = MAP_WIDTH * GAME_TILE_SIZE;
+                const worldHeight = MAP_HEIGHT * GAME_TILE_SIZE;
+
+                // Calculate starting position to center the map
+                const startX = -worldWidth / 2;
+                const startY = -worldHeight / 2;
+
+                // Only set initial position if car position hasn't been loaded
+                if (gameState.car.x === 0 && gameState.car.y === 0) {
+                    gameState.car.x = 0;
+                    gameState.car.y = 0;
+                }
+
+                // Update viewport to follow car
+                gameState.viewport.x = gameState.car.x - canvas.width / 2;
+                gameState.viewport.y = gameState.car.y - canvas.height / 2;
+
+                // Create temporary canvas to read map image
+                const mapCanvas = document.createElement('canvas');
+                const mapCtx = mapCanvas.getContext('2d', { willReadFrequently: true });
+
+                mapCanvas.width = MAP_WIDTH;
+                mapCanvas.height = MAP_HEIGHT;
+                mapCtx.drawImage(mapImage, 0, 0, MAP_WIDTH, MAP_HEIGHT);
+
+                const imageData = mapCtx.getImageData(0, 0, MAP_WIDTH, MAP_HEIGHT);
+                const data = imageData.data;
+
+                // Clear existing terrain
+                gameState.terrain = [];
+
+                // Create tiles based on map dimensions
+                for (let y = 0; y < MAP_HEIGHT; y++) {
+                    for (let x = 0; x < MAP_WIDTH; x++) {
+                        const i = (y * MAP_WIDTH + x) * 4;
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+
+                        // Convert RGB to hex color
+                        const hexColor = '#' +
+                            r.toString(16).padStart(2, '0') +
+                            g.toString(16).padStart(2, '0') +
+                            b.toString(16).padStart(2, '0');
+
+                        // Store original color and get terrain type if it exists
+                        const originalColor = `rgb(${r}, ${g}, ${b})`;
+                        let terrainType = MAP_COLORS[hexColor] || 'unknown';
+
+                        const worldX = startX + x * GAME_TILE_SIZE;
+                        const worldY = startY + y * GAME_TILE_SIZE;
+
+                        // Check if this artifact was previously collected
+                        let isCollected = false;
+                        if (terrainType === 'artifact_heart' || terrainType === 'artifact_fuel') {
+                            isCollected = gameState.stats.artifactsCollected.some(
+                                artifact => artifact.type === terrainType
+                            );
+                            if (isCollected) {
+                                terrainType = 'collected';
+                            }
+                        }
+
+                        const point = {
+                            x: worldX,
+                            y: worldY,
+                            type: terrainType,
+                            originalColor: originalColor,
+                            size: GAME_TILE_SIZE,
+                            active: !isCollected
+                        };
+
+                        gameState.terrain.push(point);
+                    }
+                }
+
+            } catch (error) {
+                // Error handling without console.error
+                return;
+            }
+        }
+
+        // Update car physics
+        function updateCar() {
+            // Check for game over conditions at the start
+            if (gameState.car.hp <= 0) {
+                showGameOver('hp');
+                return;
+            }
+            if (gameState.car.fuel <= 0 && gameState.car.trunkFuel <= 0) {
+                showGameOver('fuel');
+                return;
+            }
+            if (gameState.car.battery <= 0 && gameState.car.trunkBattery <= 0) {
+                showGameOver('battery');
+                return;
+            }
+
+            // Get current time of day once
+            const timeOfDay = gameState.time.current * 24;
+            const isNight = timeOfDay >= 18 || timeOfDay < 6;
+            const now = Date.now();
+
+            // Replenish resources from trunk when stopped
+            if (Math.abs(gameState.car.speed) < 0.1) {
+                // Replenish fuel from trunk
+                if (gameState.car.fuel < gameState.car.maxFuel && gameState.car.trunkFuel > 0) {
+                    if (now - gameState.car.lastFuelUse >= 10000) { // 10 seconds
+                        gameState.car.trunkFuel -= 1;
+                        gameState.car.fuel += 1;
+                        gameState.car.lastFuelUse = now;
+                        showNotification('Replenishing fuel from trunk: +1');
+                    }
+                }
+
+                // Replenish battery from trunk
+                if (gameState.car.battery < gameState.car.maxBattery && gameState.car.trunkBattery > 0) {
+                    if (now - gameState.car.lastBatteryUse >= 10000) { // 10 seconds
+                        gameState.car.trunkBattery -= 1;
+                        gameState.car.battery += 1;
+                        gameState.car.lastBatteryUse = now;
+                        showNotification('Replenishing battery from trunk: +1');
+                    }
+                }
+
+                // Auto-repair using trunk scrap metal
+                if (gameState.car.hp < 100 && gameState.car.trunk > 0) {
+                    if (now - gameState.car.lastRepairTime >= 10000) { // 10 seconds
+                        gameState.car.hp += 1;
+                        gameState.car.trunk -= 1;
+                        gameState.car.lastRepairTime = now;
+                        showNotification('Auto-repairing with scrap: +1 HP');
+                    }
+                }
+            }
+
+            // Check fuel consumption (1 per 10 seconds while moving)
+            if (Math.abs(gameState.car.speed) > 0.1) {
+                if (now - gameState.car.lastFuelUse >= 10000) { // 10 seconds
+                    if (gameState.car.fuel > 0) {
+                        gameState.car.fuel -= 1;
+                    } else if (gameState.car.trunkFuel > 0) {
+                        // Use fuel from trunk
+                        gameState.car.trunkFuel -= 1;
+                        gameState.car.fuel += 1;
+                    }
+                    gameState.car.lastFuelUse = now;
+                }
+            }
+
+            // Starting the engine (when going from stop to moving)
+            if (!gameState.car.isEngineRunning && Math.abs(gameState.car.speed) > 0.01) {
+                if (gameState.car.battery > 0) {
+                    gameState.car.battery -= 1;
+                    audioManager.playSound('engine', true);
+                } else if (gameState.car.trunkBattery > 0) {
+                    gameState.car.trunkBattery -= 1;
+                    gameState.car.battery += 1;
+                    showNotification('Using circuit from trunk to start engine: +1 Battery');
+                    audioManager.playSound('engine', true);
+                }
+                gameState.car.isEngineRunning = true;
+            } else if (Math.abs(gameState.car.speed) < 0.01) {
+                gameState.car.isEngineRunning = false;
+                audioManager.stopSound('engine');
+            }
+
+            // Update engine sound based on speed
+            if (gameState.car.isEngineRunning) {
+                audioManager.updateEngineSound(gameState.car.speed);
+            }
+
+            // Battery drain while driving
+            if (Math.abs(gameState.car.speed) > 0.1) {
+                if (now - gameState.car.lastBatteryUse >= 10000) { // 10 seconds
+                    if (gameState.car.battery > 0) {
+                        gameState.car.battery -= 1;
+                    } else if (gameState.car.trunkBattery > 0) {
+                        // Use circuits from trunk
+                        gameState.car.trunkBattery -= 1;
+                        gameState.car.battery += 1;
+                        showNotification('Using circuit from trunk: +1 Battery');
+                    }
+                    gameState.car.lastBatteryUse = now;
+                }
+            }
+
+            // Don't move if HP is 0 or no fuel or no battery
+            if (gameState.car.hp <= 0 ||
+                (gameState.car.fuel <= 0 && gameState.car.trunkFuel <= 0) ||
+                (gameState.car.battery <= 0 && gameState.car.trunkBattery <= 0)) {
+                gameState.car.speed = 0;
+                gameState.car.acceleration = 0;
+                return;
+            }
+
+            // Auto-repair using trunk scrap metal (1 HP per 10 seconds if damaged)
+            if (gameState.car.hp < 100 && gameState.car.trunk > 0) {
+                if (now - gameState.car.lastRepairTime >= 10000) { // 10 seconds
+                    gameState.car.hp += 1;
+                    gameState.car.trunk -= 1;
+                    gameState.car.lastRepairTime = now;
+                }
+            }
+
+            // Handle controls with improved braking and reverse
+            if (gameState.keys['ArrowUp']) {
+                gameState.car.acceleration = 0.2;
+            } else if (gameState.keys['ArrowDown']) {
+                gameState.car.acceleration = -0.15; // Direct reverse control
+            } else {
+                gameState.car.acceleration = 0;
+            }
+
+            // Enhanced turning physics
+            const baseSteeringRate = 0.008;
+            const speedFactor = Math.abs(gameState.car.speed);
+            const steeringInertia = 0.95; // Higher value = less inertia (0.85 = subtle inertia)
+
+            // Calculate turn rate based on speed
+            let turnRate = baseSteeringRate;
+            if (speedFactor > 2) {
+                // Reduce turning at higher speeds
+                turnRate *= (1 - (speedFactor - 2) * 0.1);
+            } else if (speedFactor < 0.5) {
+                // Reduce turning at very low speeds
+                turnRate *= speedFactor * 2;
+            }
+
+            // Handle steering with improved physics and inertia
+            if (gameState.keys['ArrowLeft']) {
+                // Gradually increase steering to max turn rate
+                gameState.car.steering = Math.max(-turnRate, gameState.car.steering - (turnRate * 0.2));
+            } else if (gameState.keys['ArrowRight']) {
+                // Gradually increase steering to max turn rate
+                gameState.car.steering = Math.min(turnRate, gameState.car.steering + (turnRate * 0.2));
+            } else {
+                // Gradual steering return to center with inertia
+                gameState.car.steering *= steeringInertia;
+            }
+
+            // Handle handbrake and drifting
+            if (gameState.keys[' ']) {
+                gameState.car.isHandbrakeOn = true;
+                gameState.car.speed *= 0.90;
+                gameState.car.grip = 0.7;
+                // Enhanced handbrake turning
+                gameState.car.rotation += gameState.car.steering * gameState.car.speed * 1.5;
+
+                // Play drift sound if moving fast enough
+                if (Math.abs(gameState.car.speed) > 1) {
+                    audioManager.playSound('drift', true);
+                }
+            } else {
+                if (gameState.car.isHandbrakeOn) {
+                    audioManager.stopSound('drift');
+                }
+                gameState.car.isHandbrakeOn = false;
+                gameState.car.grip = 0.95;
+                // Normal turning
+                gameState.car.rotation += gameState.car.steering * gameState.car.speed;
+            }
+
+            // Track turning duration
+            if (Math.abs(gameState.car.steering) > 0.005) {
+                if (!gameState.car.isTurning) {
+                    gameState.car.turnStartTime = Date.now();
+                    gameState.car.isTurning = true;
+                }
+            } else {
+                gameState.car.isTurning = false;
+            }
+
+            // Check current terrain type
+            const carTerrain = gameState.terrain.find(point => {
+                const dx = point.x - gameState.car.x;
+                const dy = point.y - gameState.car.y;
+                return Math.sqrt(dx * dx + dy * dy) < point.size / 2;
+            });
+
+            // Add garage regeneration
+            if (carTerrain && carTerrain.type === 'garage' && Math.abs(gameState.car.speed) < 0.1) {
+                if (now - gameState.car.lastRepairTime >= 2000) { // 2 seconds
+                    // Regenerate HP
+                    if (gameState.car.hp < 100) {
+                        gameState.car.hp = Math.min(100, gameState.car.hp + 1);
+                        showNotification('Garage repairing: +1 HP');
+                    }
+
+                    // Regenerate Battery
+                    if (gameState.car.battery < gameState.car.maxBattery) {
+                        gameState.car.battery = Math.min(gameState.car.maxBattery, gameState.car.battery + 1);
+                        showNotification('Garage charging: +1 Battery');
+                    }
+
+                    // Regenerate Fuel
+                    if (gameState.car.fuel < gameState.car.maxFuel) {
+                        gameState.car.fuel = Math.min(gameState.car.maxFuel, gameState.car.fuel + 1);
+                        showNotification('Garage refueling: +1 Fuel');
+                    }
+
+                    gameState.car.lastRepairTime = now;
+                }
+            }
+
+            // Apply terrain-specific speed modifiers
+            let terrainSpeedMultiplier = 1;
+            if (carTerrain) {
+                switch (carTerrain.type) {
+                    case 'mud':
+                    case 'snow':
+                        terrainSpeedMultiplier = 0.5;
+                        break;
+                    case 'water':
+                        terrainSpeedMultiplier = 0.8;
+                        break;
+                    case 'deepwater':
+                        terrainSpeedMultiplier = 0.6;
+                        break;
+                }
+            }
+
+            // Apply physics with terrain effects
+            gameState.car.speed += gameState.car.acceleration * terrainSpeedMultiplier;
+            gameState.car.speed *= 0.95; // Friction
+
+            // Add tire tracks for appropriate terrain
+            if (Math.abs(gameState.car.speed) > 0.1 && carTerrain && (
+                carTerrain.type === 'grass' ||
+                carTerrain.type === 'highgrass' ||
+                carTerrain.type === 'hill' ||
+                carTerrain.type === 'mud' ||
+                carTerrain.type === 'snow' ||
+                carTerrain.type === 'road'
+            )) {
+                const tireOffset = gameState.car.width * 0.4;
+                const cos = Math.cos(gameState.car.rotation);
+                const sin = Math.sin(gameState.car.rotation);
+
+                const leftTire = {
+                    x: gameState.car.x - cos * tireOffset,
+                    y: gameState.car.y - sin * tireOffset
+                };
+                const rightTire = {
+                    x: gameState.car.x + cos * tireOffset,
+                    y: gameState.car.y + sin * tireOffset
+                };
+
+                gameState.tireTrackHistory.push({
+                    left: { ...leftTire },
+                    right: { ...rightTire },
+                    age: carTerrain.type === 'road' ? 900 : // Longer lasting on road
+                        carTerrain.type === 'mud' || carTerrain.type === 'snow' ? 600 : 300,
+                    type: carTerrain.type
+                });
+            }
+
+            // Update tire track ages and remove old ones
+            gameState.tireTrackHistory = gameState.tireTrackHistory
+                .map(track => ({ ...track, age: track.age - 1 }))
+                .filter(track => track.age > 0);
+
+            // Store previous position for collision resolution
+            const prevX = gameState.car.x;
+            const prevY = gameState.car.y;
+
+            // Update position
+            gameState.car.x += Math.sin(gameState.car.rotation) * gameState.car.speed;
+            gameState.car.y -= Math.cos(gameState.car.rotation) * gameState.car.speed;
+
+            // Apply water and deep water damage
+            if (carTerrain) {
+                if (carTerrain.type === 'water') {
+                    // Apply damage every second
+                    if (now - gameState.car.lastDamageTime > 1000) {
+                        gameState.car.hp -= 1;
+                        gameState.car.lastDamageTime = now;
+                    }
+                    gameState.car.speed *= 0.8;
+                    // Create water splash particles if moving
+                    if (Math.abs(gameState.car.speed) > 0.1) {
+                        createWaterSplashParticle(gameState);
+                        audioManager.playSound('splash');
+                    }
+                } else if (carTerrain.type === 'deepwater') {
+                    if (now - gameState.car.lastDamageTime > 1000) {
+                        gameState.car.hp -= 10;
+                        gameState.car.lastDamageTime = now;
+                    }
+                    gameState.car.speed *= 0.6;
+                    if (Math.abs(gameState.car.speed) > 0.1) {
+                        createWaterSplashParticle(gameState);
+                        createWaterSplashParticle(gameState);
+                        audioManager.playSound('splash');
+                    }
+                }
+            }
+
+            // Handle collisions with trees and rocks
+            const nearbyTerrain = gameState.terrain.filter(point => {
+                const dx = point.x - gameState.car.x;
+                const dy = point.y - gameState.car.y;
+                return Math.sqrt(dx * dx + dy * dy) < point.size;  // Check within a larger radius
+            });
+
+            // Check all nearby obstacles
+            for (const point of nearbyTerrain) {
+                if ((point.type === 'tree' || point.type === 'rock') && point.active) {
+                    const dx = point.x - gameState.car.x;
+                    const dy = point.y - gameState.car.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < point.size / 2) {
+                        // Apply damage if moving fast enough
+                        if (Math.abs(gameState.car.speed) > 0.5 &&
+                            Date.now() - gameState.car.lastDamageTime > 1000) {
+                            gameState.car.hp -= 10;
+                            gameState.car.lastDamageTime = Date.now();
+                            audioManager.playSound('impact');
+                        }
+
+                        // Stop the car
+                        gameState.car.speed = 0;
+                        gameState.car.acceleration = 0;
+
+                        // Minimal push back
+                        const pushAngle = Math.atan2(dy, dx);
+                        gameState.car.x = point.x - Math.cos(pushAngle) * (point.size / 2 + 5);
+                        gameState.car.y = point.y - Math.sin(pushAngle) * (point.size / 2 + 5);
+
+                        return; // Skip the rest of the physics update
+                    }
+                }
+            }
+
+            // Update viewport (camera) to follow car
+            gameState.viewport.x = gameState.car.x - canvas.width / 2;
+            gameState.viewport.y = gameState.car.y - canvas.height / 2;
+
+            // Update status panel
+            document.getElementById('hpText').textContent = Math.round(gameState.car.hp);
+            document.getElementById('hpBarFill').style.width = `${gameState.car.hp}%`;
+            document.getElementById('fuelText').textContent = Math.round(gameState.car.fuel);
+            document.getElementById('fuelBarFill').style.width = `${gameState.car.fuel}%`;
+            document.getElementById('batteryText').textContent = Math.round(gameState.car.battery);
+            document.getElementById('batteryBarFill').style.width = `${gameState.car.battery}%`;
+            document.getElementById('speedText').textContent = Math.abs(Math.round(gameState.car.speed * 50));
+            document.getElementById('posX').textContent = Math.round(gameState.car.x);
+            document.getElementById('posY').textContent = Math.round(gameState.car.y);
+            document.getElementById('terrainText').textContent = carTerrain ? carTerrain.type : 'unknown';
+            document.getElementById('trunkText').textContent = gameState.car.trunk;
+            document.getElementById('maxTrunkText').textContent = gameState.car.maxTrunk;
+            document.getElementById('trunkFuelText').textContent = gameState.car.trunkFuel;
+            document.getElementById('maxTrunkFuelText').textContent = gameState.car.maxTrunkFuel;
+            document.getElementById('trunkBatteryText').textContent = gameState.car.trunkBattery;
+            document.getElementById('maxTrunkBatteryText').textContent = gameState.car.maxTrunkBattery;
+
+            // Change HP bar color based on health
+            const hpBarFill = document.getElementById('hpBarFill');
+            if (gameState.car.hp > 60) {
+                hpBarFill.style.background = '#0f0';
+            } else if (gameState.car.hp > 30) {
+                hpBarFill.style.background = '#ff0';
+            } else {
+                hpBarFill.style.background = '#f00';
+            }
+
+            // Check for scrap metal collection
+            gameState.terrain.forEach(point => {
+                if ((point.type === 'scrap' || point.type === 'artifact_heart' || point.type === 'artifact_fuel') && point.active) {
+                    const dx = point.x - gameState.car.x;
+                    const dy = point.y - gameState.car.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < point.size / 2) {
+                        if (point.type === 'artifact_heart') {
+                            // Heart artifact effect
+                            gameState.car.hp = 100;  // Full HP
+                            gameState.car.trunk = Math.min(
+                                gameState.car.trunk + 250,
+                                gameState.car.maxTrunk
+                            );
+                            // Add to collected artifacts
+                            gameState.stats.artifactsCollected.push({
+                                type: 'artifact_heart',
+                                name: 'The Heart',
+                                collectedAt: Date.now()
+                            });
+                            showNotification('The Heart collected: Full HP + 250 Scrap!');
+                            saveGame();  // Save progress when artifact is collected
+                            point.type = 'collected';  // Change the tile to collected after collection
+                        } else if (point.type === 'artifact_fuel') {
+                            // Fuel artifact effect
+                            gameState.car.trunkFuel = Math.min(
+                                gameState.car.trunkFuel + 250,
+                                gameState.car.maxTrunkFuel
+                            );
+                            // Add to collected artifacts
+                            gameState.stats.artifactsCollected.push({
+                                type: 'artifact_fuel',
+                                name: 'The Fuel Crystal',
+                                collectedAt: Date.now()
+                            });
+                            showNotification('The Fuel Crystal collected: +250 Fuel to trunk!');
+                            saveGame();  // Save progress when artifact is collected
+                            point.type = 'collected';  // Change the tile to collected after collection
+                        } else {
+                            // Normal scrap collection logic
+                            const hpNeeded = 100 - gameState.car.hp;
+                            if (hpNeeded > 0) {
+                                gameState.car.hp += 10;
+                                showNotification('Scrap collected: +10 HP');
+                                if (gameState.car.hp > 100) {
+                                    const excess = gameState.car.hp - 100;
+                                    gameState.car.hp = 100;
+                                    gameState.car.trunk = Math.min(
+                                        gameState.car.trunk + excess,
+                                        gameState.car.maxTrunk
+                                    );
+                                    showNotification(`Excess scrap stored in trunk: +${excess}`);
+                                }
+                            } else {
+                                gameState.car.trunk = Math.min(
+                                    gameState.car.trunk + 10,
+                                    gameState.car.maxTrunk
+                                );
+                                showNotification('Scrap stored in trunk: +10');
+                            }
+                        }
+                        point.active = false; // Deactivate collected item
+                    }
+                }
+            });
+
+            // Check for barrel collection
+            gameState.terrain.forEach(point => {
+                if (point.type === 'barrel' && point.active) {
+                    const dx = point.x - gameState.car.x;
+                    const dy = point.y - gameState.car.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < point.size / 2) {
+                        // Calculate how much fuel tank needs
+                        const fuelNeeded = gameState.car.maxFuel - gameState.car.fuel;
+                        if (fuelNeeded > 0) {
+                            gameState.car.fuel += 10;
+                            showNotification('Fuel collected: +10');
+                            if (gameState.car.fuel > gameState.car.maxFuel) {
+                                // Store excess in trunk
+                                const excess = gameState.car.fuel - gameState.car.maxFuel;
+                                gameState.car.fuel = gameState.car.maxFuel;
+                                gameState.car.trunkFuel = Math.min(
+                                    gameState.car.trunkFuel + excess,
+                                    gameState.car.maxTrunkFuel
+                                );
+                                showNotification(`Excess fuel stored in trunk: +${excess}`);
+                            }
+                        } else {
+                            // Store all in trunk if tank is full
+                            gameState.car.trunkFuel = Math.min(
+                                gameState.car.trunkFuel + 10,
+                                gameState.car.maxTrunkFuel
+                            );
+                            showNotification('Fuel stored in trunk: +10');
+                        }
+                        point.active = false; // Deactivate collected barrel
+                    }
+                }
+            });
+
+            // Check for circuit collection
+            gameState.terrain.forEach(point => {
+                if (point.type === 'circuit' && point.active) {
+                    const dx = point.x - gameState.car.x;
+                    const dy = point.y - gameState.car.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < point.size / 2) {
+                        // Calculate how much battery needs
+                        const batteryNeeded = gameState.car.maxBattery - gameState.car.battery;
+                        if (batteryNeeded > 0) {
+                            gameState.car.battery += 10;
+                            showNotification('Circuit collected: +10 Battery');
+                            if (gameState.car.battery > gameState.car.maxBattery) {
+                                // Store excess in trunk
+                                const excess = gameState.car.battery - gameState.car.maxBattery;
+                                gameState.car.battery = gameState.car.maxBattery;
+                                gameState.car.trunkBattery = Math.min(
+                                    gameState.car.trunkBattery + excess,
+                                    gameState.car.maxTrunkBattery
+                                );
+                                showNotification(`Excess circuits stored in trunk: +${excess}`);
+                            }
+                        } else {
+                            // Store all in trunk if battery is full
+                            gameState.car.trunkBattery = Math.min(
+                                gameState.car.trunkBattery + 10,
+                                gameState.car.maxTrunkBattery
+                            );
+                            showNotification('Circuits stored in trunk: +10');
+                        }
+                        point.active = false; // Deactivate collected circuit
+                    }
+                }
+            });
+
+            // Update time of day text
+            let dayPhase;
+            if (timeOfDay >= 5 && timeOfDay < 8) dayPhase = "Dawn";
+            else if (timeOfDay >= 8 && timeOfDay < 12) dayPhase = "Morning";
+            else if (timeOfDay >= 12 && timeOfDay < 14) dayPhase = "Noon";
+            else if (timeOfDay >= 14 && timeOfDay < 17) dayPhase = "Afternoon";
+            else if (timeOfDay >= 17 && timeOfDay < 20) dayPhase = "Dusk";
+            else if (timeOfDay >= 20 || timeOfDay < 5) dayPhase = "Night";
+            document.getElementById('dayPhaseText').textContent = dayPhase;
+
+            // Get current terrain
+            const currentTerrain = gameState.terrain.find(point => {
+                const dx = point.x - gameState.car.x;
+                const dy = point.y - gameState.car.y;
+                return Math.sqrt(dx * dx + dy * dy) < point.size / 2;
+            });
+
+            // Calculate distance moved this frame
+            const distanceMoved = Math.abs(gameState.car.speed) / 1000; // Convert to kilometers
+            gameState.stats.totalDistance += distanceMoved;
+        }
+
+        // Update car drawing
+        function drawCar() {
+            ctx.save();
+            ctx.translate(
+                gameState.car.x - gameState.viewport.x,
+                gameState.car.y - gameState.viewport.y
+            );
+            ctx.rotate(gameState.car.rotation);
+
+            const width = gameState.car.width;
+            const length = gameState.car.length;
+
+            if (images.car?.complete) {
+                // Draw car sprite
+                ctx.drawImage(
+                    images.car,
+                    -width / 2,  // Center the image
+                    -length / 2,
+                    width,      // Use exact width
+                    length      // Use exact length
+                );
+            } else {
+                // Fallback to geometric shape if image not loaded
+                // Car dimensions
+                const roofWidth = width * 0.7;
+                const roofLength = length * 0.5;
+
+                // Draw car body (main shape)
+                ctx.beginPath();
+                ctx.moveTo(-width / 2, length / 2);  // Back left
+                ctx.lineTo(width / 2, length / 2);   // Back right
+                ctx.lineTo(width / 2, -length / 2);  // Front right
+                ctx.lineTo(-width / 2, -length / 2); // Front left
+                ctx.closePath();
+                ctx.fillStyle = '#ff0000';  // Main car color
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw roof
+                ctx.beginPath();
+                ctx.moveTo(-roofWidth / 2, length / 4);
+                ctx.lineTo(roofWidth / 2, length / 4);
+                ctx.lineTo(roofWidth / 2, -length / 4);
+                ctx.lineTo(-roofWidth / 2, -length / 4);
+                ctx.closePath();
+                ctx.fillStyle = '#cc0000';
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw windows
+                ctx.fillStyle = '#333';
+                ctx.fillRect(-roofWidth / 2 - 1, 0, roofWidth + 2, 2);
+
+                // Draw bumpers
+                ctx.fillStyle = '#888';
+                ctx.fillRect(-width / 2, -length / 2, width, 4);
+                ctx.fillRect(-width / 2, length / 2 - 4, width, 4);
+            }
+
+            ctx.restore();
+        }
+
+        // Add new function for drawing car lights
+        function drawCarLights() {
+            if (!gameState.car.lightsOn) {
+                return; // Don't draw any lights if they're turned off
+            }
+
+            ctx.save();
+            ctx.translate(
+                gameState.car.x - gameState.viewport.x,
+                gameState.car.y - gameState.viewport.y
+            );
+            ctx.rotate(gameState.car.rotation);
+
+            const width = gameState.car.width;
+            const length = gameState.car.length;
+
+            // Calculate light intensity based on time
+            const timeOfDay = gameState.time.current * 24;
+            let headlightIntensity = 0;
+
+            if (timeOfDay <= 6 || timeOfDay >= 18) {
+                headlightIntensity = 1;
+            } else if (timeOfDay <= 7 || timeOfDay >= 17) {
+                headlightIntensity = timeOfDay <= 7 ?
+                    (7 - timeOfDay) :
+                    (timeOfDay - 17);
+            }
+
+            // Draw headlight beams with multiple layers for better glow
+            if (headlightIntensity > 0) {
+                // Save the current composite operation
+                ctx.globalCompositeOperation = 'lighter';
+
+                // Outermost glow (widest and faintest)
+                ctx.beginPath();
+                ctx.moveTo(-width / 4, -length / 2);
+                ctx.lineTo(-width / 2 - 70, -length / 2 - 120);
+                ctx.lineTo(width / 2 + 70, -length / 2 - 120);
+                ctx.lineTo(width / 4, -length / 2);
+                ctx.fillStyle = `rgba(255, 255, 200, ${0.025 * headlightIntensity})`;
+                ctx.fill();
+
+                // Create gradient for the main beam
+                const gradient = ctx.createRadialGradient(
+                    0, -length / 2,  // Start at car front center
+                    0,               // Start radius
+                    0, -length / 2 - 60,  // End at beam middle
+                    80              // End radius
+                );
+                gradient.addColorStop(0, `rgba(255, 255, 220, ${0.5 * headlightIntensity})`);
+                gradient.addColorStop(1, `rgba(255, 255, 220, 0)`);
+
+                // Middle glow with gradient
+                ctx.beginPath();
+                ctx.moveTo(-width / 4, -length / 2);
+                ctx.lineTo(-width / 2 - 50, -length / 2 - 100);
+                ctx.lineTo(width / 2 + 50, -length / 2 - 100);
+                ctx.lineTo(width / 4, -length / 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                // Inner bright beam
+                /*
+                ctx.beginPath();
+                ctx.moveTo(-width / 4, -length / 2);
+                ctx.lineTo(-width / 2 - 30, -length / 2 - 80);
+                ctx.lineTo(width / 2 + 30, -length / 2 - 80);
+                ctx.lineTo(width / 4, -length / 2);
+                ctx.fillStyle = `rgba(255, 255, 220, ${0.4 * headlightIntensity})`;
+                ctx.fill();
+                */
+
+                // Center bright spot with lighter blend mode for extra intensity
+                /*
+                ctx.globalCompositeOperation = 'lighter';
+                const centerGradient = ctx.createRadialGradient(
+                    0, -length / 2 - 40,  // Center of bright spot
+                    0,                    // Start radius
+                    0, -length / 2 - 40,  // Same center point
+                    30                    // End radius
+                );
+                centerGradient.addColorStop(0, `rgba(255, 255, 220, ${0.6 * headlightIntensity})`);
+                centerGradient.addColorStop(1, `rgba(255, 255, 220, 0)`);
+
+                ctx.beginPath();
+                ctx.arc(0, -length / 2 - 40, 30, 0, Math.PI * 2);
+                ctx.fillStyle = centerGradient;
+                ctx.fill();
+                */
+
+                // Headlight dots with enhanced glow
+                // Outer glow
+                const leftHeadlightGlow = ctx.createRadialGradient(
+                    -width / 4, -length / 2 + 2, 0,
+                    -width / 4, -length / 2 + 2, 8
+                );
+                leftHeadlightGlow.addColorStop(0, `rgba(255, 255, 150, ${0.9 * headlightIntensity})`);
+                leftHeadlightGlow.addColorStop(1, `rgba(255, 255, 150, 0)`);
+
+                const rightHeadlightGlow = ctx.createRadialGradient(
+                    width / 4, -length / 2 + 2, 0,
+                    width / 4, -length / 2 + 2, 8
+                );
+                rightHeadlightGlow.addColorStop(0, `rgba(255, 255, 150, ${0.9 * headlightIntensity})`);
+                rightHeadlightGlow.addColorStop(1, `rgba(255, 255, 150, 0)`);
+
+                // Left headlight glow
+                ctx.beginPath();
+                ctx.arc(-width / 4, -length / 2 + 2, 8, 0, Math.PI * 2);
+                ctx.fillStyle = leftHeadlightGlow;
+                ctx.fill();
+
+                // Right headlight glow
+                ctx.beginPath();
+                ctx.arc(width / 4, -length / 2 + 2, 8, 0, Math.PI * 2);
+                ctx.fillStyle = rightHeadlightGlow;
+                ctx.fill();
+
+                // Inner bright dots
+                ctx.beginPath();
+                ctx.arc(-width / 4, -length / 2 + 2, 3, 0, Math.PI * 2);
+                ctx.arc(width / 4, -length / 2 + 2, 3, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 0, ${headlightIntensity})`;
+                ctx.fill();
+
+                // Reset composite operation to default
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            // Draw taillights with enhanced glow
+            const isBraking = gameState.car.acceleration < 0 ||
+                (Math.abs(gameState.car.speed) > 0.1 && gameState.car.acceleration === 0);
+
+            if (isBraking) {
+                ctx.globalCompositeOperation = 'screen';
+                // Outer glow for brake lights
+                ctx.beginPath();
+                ctx.arc(-width / 4, length / 2 - 2, 8, 0, Math.PI * 2);
+                ctx.arc(width / 4, length / 2 - 2, 8, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 50, 50, 0.3)";
+                ctx.fill();
+
+                // Middle glow
+                ctx.beginPath();
+                ctx.arc(-width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
+                ctx.arc(width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 50, 50, 0.5)";
+                ctx.fill();
+
+                ctx.globalCompositeOperation = 'lighter';
+                // Bright center
+                ctx.beginPath();
+                ctx.arc(-width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
+                ctx.arc(width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 50, 50, 1.0)";
+                ctx.fill();
+            } else {
+                ctx.globalCompositeOperation = 'screen';
+                // Regular taillights with glow
+                // Outer glow
+                ctx.beginPath();
+                ctx.arc(-width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
+                ctx.arc(width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 50, 50, 0.3)";
+                ctx.fill();
+
+                // Inner light
+                ctx.beginPath();
+                ctx.arc(-width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
+                ctx.arc(width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 50, 50, 0.7)";
+                ctx.fill();
+            }
+
+            // Reset composite operation to default
+            ctx.globalCompositeOperation = 'source-over';
+
+            ctx.restore();
+        }
+
+        // Now the game loop and other functions can use these
+        function gameLoop(timestamp) {
+            // Update time
+            updateTime();
+
+            // Clear canvas first
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Calculate ambient light based on time of day
+            const timeOfDay = gameState.time.current * 24;
+            let daylight;
+
+            if (timeOfDay >= 6 && timeOfDay <= 18) {
+                const midday = 12;
+                const timeDiff = Math.abs(timeOfDay - midday);
+                daylight = 1 - (timeDiff / 6) * 0.3;
+            } else if (timeOfDay < 6) {
+                daylight = Math.max(0.1, (timeOfDay / 6) * 0.7);
+            } else {
+                daylight = Math.max(0.1, ((24 - timeOfDay) / 6) * 0.7);
+            }
+
+            const darkness = Math.max(0.1, Math.min(0.7, 1 - daylight));
+
+            // Draw terrain
+            drawTerrain();
+
+            // Draw tire tracks
+            gameState.tireTrackHistory.forEach(track => {
+                const opacity = track.age / (track.type === 'road' ? 900 :
+                    track.type === 'mud' || track.type === 'snow' ? 600 : 300);
+
+                // Use neutral dark gray for all terrain types
+                ctx.fillStyle = `rgba(40, 40, 40, ${opacity * 0.7})`; // Darker gray with increased opacity
+
+                ctx.beginPath();
+                ctx.arc(
+                    track.left.x - gameState.viewport.x,
+                    track.left.y - gameState.viewport.y,
+                    2, 0, Math.PI * 2
+                );
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(
+                    track.right.x - gameState.viewport.x,
+                    track.right.y - gameState.viewport.y,
+                    2, 0, Math.PI * 2
+                );
+                ctx.fill();
+            });
+
+            // Update particles
+            updateFireParticles(gameState);
+            updateHandbrakeParticles(gameState);
+            updateExhaustParticles(gameState);
+            updateWaterSplashParticles(gameState);
+
+            // Draw particles in correct order
+            drawWaterSplashParticles(ctx, gameState);  // Draw water first
+            drawHandbrakeParticles(ctx, gameState);
+            drawExhaustParticles(ctx, gameState);
+
+            // Draw car
+            drawCar();
+
+            // Apply darkness overlay
+            ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw fire particles and lights after darkness
+            drawFireParticles(ctx, gameState);
+            drawCarLights();
+
+            // Update car physics
+            updateCar();
+
+            // Update total time (add 1/60th of a second assuming 60 FPS)
+            gameState.time.totalSeconds += 1 / 60;
+
+            // Update panel
+            const timeElement = document.getElementById('totalTime');
+            const distanceElement = document.getElementById('totalDistance');
+
+            if (timeElement) {
+                const hours = Math.floor(gameState.time.totalSeconds / 3600);
+                const minutes = Math.floor((gameState.time.totalSeconds % 3600) / 60);
+                const seconds = Math.floor(gameState.time.totalSeconds % 60);
+                timeElement.textContent = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+
+            if (distanceElement) {
+                distanceElement.textContent = gameState.stats.totalDistance.toFixed(2);
+            }
+
+            // Update artifacts display
+            updateArtifactsDisplay();
+
+            // Update server with player state
+            if (gameState.multiplayer) {
+                gameState.multiplayer.updateServer();
+            }
+
+            // Draw other players after darkness but before particles
+            if (gameState.multiplayer) {
+                gameState.multiplayer.drawOtherPlayers(ctx);
+            }
+
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize game
+        gameLoop();
+
+        // Update time of day
+        function updateTime() {
+            const now = Date.now();
+            const delta = (now - gameState.time.lastUpdate) / 1000; // seconds
+            gameState.time.lastUpdate = now;
+
+            gameState.time.current += delta / gameState.time.cycleLength;
+            if (gameState.time.current >= 1) gameState.time.current -= 1;
+
+            // Convert time to hours and minutes
+            const hours = Math.floor((gameState.time.current * 24));
+            const minutes = Math.floor((gameState.time.current * 24 * 60) % 60);
+            document.getElementById('timeText').textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+
+        // Update drawTerrain function
+        function drawTerrain() {
+            // Draw a background
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Get current time for water animation
+            const waterAnimTime = Date.now() / 1000; // Convert to seconds for smoother animation
+
+            gameState.terrain.forEach(point => {
+                const screenX = point.x - gameState.viewport.x;
+                const screenY = point.y - gameState.viewport.y;
+
+                // Relaxed culling to make sure we're not accidentally culling too much
+                if (screenX < -point.size * 2 || screenX > canvas.width + point.size * 2 ||
+                    screenY < -point.size * 2 || screenY > canvas.height + point.size * 2) {
+                    return;
+                }
+
+                // If it's a collectible that's been collected, show grey texture
+                if ((point.type === 'scrap' || point.type === 'circuit' || point.type === 'barrel') && !point.active) {
+                    ctx.fillStyle = TERRAIN_COLORS.collected;
+                    ctx.fillRect(screenX - point.size / 2, screenY - point.size / 2, point.size, point.size);
+                } else {
+                    // If it's a known terrain type, use TERRAIN_COLORS, otherwise use the original map color
+                    const baseColor = TERRAIN_COLORS[point.type] || point.originalColor || '#00aa00';
+
+                    // Special handling for water animation only
+                    if (point.type === 'water' || point.type === 'deepwater') {
+                        // Create wave effect using sine waves with larger amplitude
+                        const waveX = Math.sin(point.x / 80 + waterAnimTime * 2) * 0.8;
+                        const waveY = Math.cos(point.y / 80 + waterAnimTime * 2) * 0.8;
+                        const wave = (waveX + waveY) * 0.7;
+
+                        // Add ripple effect with larger radius
+                        const ripple = Math.sin(
+                            Math.sqrt(
+                                Math.pow(point.x / 60, 2) +
+                                Math.pow(point.y / 60, 2)
+                            ) - waterAnimTime * 3
+                        ) * 0.6;
+
+                        // Combine effects with higher intensity
+                        const combinedEffect = (wave + ripple);
+
+                        if (point.type === 'water') {
+                            // Brighter blue variations for water
+                            ctx.fillStyle = `rgb(40, 40, ${Math.min(255, 255 + combinedEffect * 60)})`;
+                        } else { // deepwater
+                            // Darker blue variations for deep water
+                            ctx.fillStyle = `rgb(0, 0, ${Math.min(180, 102 + combinedEffect * 50)})`;
+                        }
+                    } else {
+                        ctx.fillStyle = baseColor;
+                    }
+
+                    ctx.fillRect(screenX - point.size / 2, screenY - point.size / 2, point.size, point.size);
+
+                    // Draw texture without blend mode if available
+                    /*
+                      if (images[point.type]?.complete) {
+                          ctx.drawImage(
+                              images[point.type],
+                              screenX - point.size / 2,
+                              screenY - point.size / 2,
+                              point.size,
+                              point.size
+                          );
+                      }
+                      /**/
+                }
+            });
+        }
+
+        // Add save function (after gameState definition)
+        function saveGame() {
+            const saveData = {
+                position: {
+                    x: gameState.car.x,
+                    y: gameState.car.y,
+                    rotation: gameState.car.rotation
+                },
+                stats: {
+                    totalTime: gameState.time.totalSeconds,
+                    totalDistance: gameState.stats.totalDistance,
+                    artifactsCollected: gameState.stats.artifactsCollected
+                },
+                time: {
+                    current: gameState.time.current
+                },
+                car: {
+                    hp: gameState.car.hp,
+                    fuel: gameState.car.fuel,
+                    battery: gameState.car.battery,
+                    trunk: gameState.car.trunk,
+                    trunkFuel: gameState.car.trunkFuel,
+                    trunkBattery: gameState.car.trunkBattery
+                }
+            };
+            localStorage.setItem('carGameSave', JSON.stringify(saveData));
+        }
+
+        // Add load function (after saveGame)
+        function loadGame() {
+            const saveData = JSON.parse(localStorage.getItem('carGameSave'));
+            if (saveData) {
+                gameState.car.x = saveData.position.x;
+                gameState.car.y = saveData.position.y;
+                gameState.car.rotation = saveData.position.rotation;
+                gameState.time.totalSeconds = saveData.stats.totalTime || 0;
+                gameState.stats.totalDistance = saveData.stats.totalDistance || 0;
+                gameState.stats.artifactsCollected = saveData.stats.artifactsCollected || [];
+
+                // Load time of day
+                if (saveData.time) {
+                    gameState.time.current = saveData.time.current;
+                }
+
+                // Load car stats and trunk values
+                if (saveData.car) {
+                    gameState.car.hp = saveData.car.hp ?? gameState.car.hp;
+                    gameState.car.fuel = saveData.car.fuel ?? gameState.car.fuel;
+                    gameState.car.battery = saveData.car.battery ?? gameState.car.battery;
+                    gameState.car.trunk = saveData.car.trunk ?? gameState.car.trunk;
+                    gameState.car.trunkFuel = saveData.car.trunkFuel ?? gameState.car.trunkFuel;
+                    gameState.car.trunkBattery = saveData.car.trunkBattery ?? gameState.car.trunkBattery;
+                }
+
+                // After loading artifacts, regenerate terrain to update artifact states
+                generateTerrain();
+            }
+        }
+
+        // Add auto-save before page unload
+        window.addEventListener('beforeunload', function () {
+            saveGame();
+        });
+
+        // Modify your existing window.onload to include loading
+        window.onload = async function () {
+            await Promise.all([
+                loadImages(),
+                audioManager.loadSounds()
+            ]);
+            generateTerrain();  // Generate terrain first
+            loadGame();         // Then load saved game state
+
+            // Initialize multiplayer after loading game state
+            gameState.multiplayer = new MultiplayerManager(gameState);
+
+            // Make sure viewport is centered on car
+            gameState.viewport.x = gameState.car.x - canvas.width / 2;
+            gameState.viewport.y = gameState.car.y - canvas.height / 2;
+        };
+
+        // Update loadImages function
+        function loadImages() {
+            return new Promise((resolve) => {
+                let loadedCount = 0;
+                const totalImages = TEXTURES.length;
+
+                function checkAllLoaded() {
+                    loadedCount++;
+                    if (loadedCount === totalImages) {
+                        resolve();
+                    }
+                }
+
+                TEXTURES.forEach(texture => {
+                    if (!images[texture.type]) {
+                        images[texture.type] = new Image();
+                        images[texture.type].crossOrigin = 'Anonymous';
+                    }
+                    images[texture.type].onload = checkAllLoaded;
+                    images[texture.type].onerror = checkAllLoaded;
+                    images[texture.type].src = texture.src;
+                });
+            });
+        }
+
+        function showNotification(message, duration = 2000) {
+            const notif = document.getElementById('notifications');
+            notif.textContent = message;
+            notif.style.display = 'block';
+            setTimeout(() => {
+                notif.style.display = 'none';
+            }, duration);
+        }
+
+        // Add this function after showNotification
+        function updateArtifactsDisplay() {
+            const artifactsList = document.getElementById('artifactsList');
+            if (!artifactsList) return;
+
+            artifactsList.innerHTML = '';
+            gameState.stats.artifactsCollected.forEach(artifact => {
+                const artifactDiv = document.createElement('div');
+                artifactDiv.style.marginBottom = '5px';
+                artifactDiv.style.padding = '5px';
+                artifactDiv.style.background = 'rgba(255, 255, 255, 0.1)';
+                artifactDiv.style.borderRadius = '3px';
+
+                const date = new Date(artifact.collectedAt);
+                const timeStr = date.toLocaleTimeString();
+                const dateStr = date.toLocaleDateString();
+
+                artifactDiv.innerHTML = `
+                    <strong>${artifact.name}</strong><br>
+                    <small>Collected: ${dateStr} ${timeStr}</small>
+                `;
+                artifactsList.appendChild(artifactDiv);
+            });
+        }
+
+        function eraseSave() {
+            if (confirm('Are you sure you want to erase your saved game? This cannot be undone!')) {
+                // Clear localStorage
+                localStorage.removeItem('carGameSave');
+
+                // Reset car state
+                gameState.car.x = canvas.width / 2;
+                gameState.car.y = canvas.height / 2;
+                gameState.car.rotation = 0;
+                gameState.car.speed = 0;
+                gameState.car.acceleration = 0;
+                gameState.car.hp = 100;
+                gameState.car.fuel = 100;
+                gameState.car.battery = 100;
+                gameState.car.trunk = 0;
+                gameState.car.trunkFuel = 0;
+                gameState.car.trunkBattery = 0;
+                gameState.car.isEngineRunning = false;
+                gameState.car.handbrake = false;
+                gameState.car.fuelMode = true;
+                gameState.car.batteryMode = false;
+                gameState.car.portalMode = false;
+
+                // Reset game stats
+                gameState.time.totalSeconds = 0;
+                gameState.stats.totalDistance = 0;
+                gameState.stats.artifactsCollected = [];
+
+                // Reset time of day
+                gameState.time.current = 0.5; // Start at noon
+
+                // Reset UI elements
+                document.getElementById('hpText').textContent = '100';
+                document.getElementById('hpBarFill').style.width = '100%';
+                document.getElementById('fuelText').textContent = '100';
+                document.getElementById('fuelBarFill').style.width = '100%';
+                document.getElementById('batteryText').textContent = '100';
+                document.getElementById('batteryBarFill').style.width = '100%';
+                document.getElementById('trunkText').textContent = '0';
+                document.getElementById('trunkFuelText').textContent = '0';
+                document.getElementById('trunkBatteryText').textContent = '0';
+                document.getElementById('distance').textContent = '0';
+                document.getElementById('items').textContent = '0';
+                document.getElementById('time').textContent = '0:00';
+
+                // Generate new terrain
+                generateTerrain();
+
+                // Show confirmation message
+                alert('Game save erased successfully!');
+            }
+        }
+
+        // Add game over handling
+        function showGameOver(reason) {
+            // Set game over reason
+            let reasonText = '';
+            switch (reason) {
+                case 'hp':
+                    reasonText = 'Your vehicle has been destroyed';
+                    break;
+                case 'fuel':
+                    reasonText = 'Out of fuel - engine stopped';
+                    break;
+                case 'battery':
+                    reasonText = 'Battery depleted - systems offline';
+                    break;
+            }
+            document.getElementById('gameOverReason').textContent = reasonText;
+
+            // Set statistics
+            const hours = Math.floor(gameState.time.totalSeconds / 3600);
+            const minutes = Math.floor((gameState.time.totalSeconds % 3600) / 60);
+            const seconds = Math.floor(gameState.time.totalSeconds % 60);
+            document.getElementById('gameOverTime').textContent =
+                `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('gameOverDistance').textContent =
+                gameState.stats.totalDistance.toFixed(2);
+            document.getElementById('gameOverArtifacts').textContent =
+                gameState.stats.artifactsCollected.length;
+
+            // Show overlay
+            document.getElementById('gameOverOverlay').style.display = 'block';
+
+            // Erase save
+            localStorage.removeItem('carGameSave');
+        }
+
+        function restartGame() {
+            // Reset car state
+            gameState.car.x = 0;
+            gameState.car.y = 0;
+            gameState.car.rotation = 0;
+            gameState.car.speed = 0;
+            gameState.car.acceleration = 0;
+            gameState.car.hp = 100;
+            gameState.car.fuel = 100;
+            gameState.car.battery = 100;
+            gameState.car.trunk = 0;
+            gameState.car.trunkFuel = 0;
+            gameState.car.trunkBattery = 0;
+            gameState.car.isEngineRunning = false;
+            gameState.car.lightsOn = true;
+
+            // Reset game stats
+            gameState.time.totalSeconds = 0;
+            gameState.stats.totalDistance = 0;
+            gameState.stats.artifactsCollected = [];
+            gameState.time.current = 0.5; // Start at noon
+
+            // Reset viewport
+            gameState.viewport.x = gameState.car.x - canvas.width / 2;
+            gameState.viewport.y = gameState.car.y - canvas.height / 2;
+
+            // Hide game over overlay
+            document.getElementById('gameOverOverlay').style.display = 'none';
+
+            // Regenerate terrain
+            generateTerrain();
+        }
+    </script>
+</body>
+
+</html>

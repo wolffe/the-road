@@ -1,0 +1,105 @@
+ body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    touch-action: none;
+    /* Prevent default touch actions */
+}
+
+#gameContainer {
+    flex: 1;
+    position: relative;
+    /* For joystick positioning */
+}
+
+#statusPanel {
+    width: 200px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px;
+    font-family: monospace;
+    overflow: auto;
+    height: 100vh;
+    color-scheme: dark;
+    scrollbar-width: thin;
+}
+
+/* Mobile-specific styles */
+@media (max-width: 1023px) {
+    #statusPanel {
+        display: none;
+    }
+
+    #gameContainer {
+        width: 100vw;
+        height: 100vh;
+    }
+}
+
+/* Hide joystick on desktop */
+@media (min-width: 1024px) {
+    #joystick {
+        display: none;
+    }
+}
+
+.stat {
+    margin: 10px 0;
+}
+
+#hpBar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    margin: 5px 0;
+}
+
+#hpBarFill {
+    width: 100%;
+    height: 100%;
+    background: #0f0;
+    transition: width 0.3s;
+}
+
+#fuelBar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    margin: 5px 0;
+}
+
+#fuelBarFill {
+    width: 100%;
+    height: 100%;
+    background: #00f;
+    transition: width 0.3s;
+}
+
+#batteryBar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    margin: 5px 0;
+}
+
+#batteryBarFill {
+    width: 100%;
+    height: 100%;
+    background: #ff0;
+    transition: width 0.3s;
+}
+
+.danger-button {
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.danger-button:hover {
+    background-color: #cc0000;
+}
