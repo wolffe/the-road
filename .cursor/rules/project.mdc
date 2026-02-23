@@ -1,0 +1,68 @@
+---
+description: Project overview, architecture, and conventions for The Road car survival game
+alwaysApply: true
+---
+
+# The Road — Car Survival Game
+
+## Stack
+
+- HTML + vanilla JavaScript (no frameworks, no bundlers, no npm runtime)
+- Single `index.html` with inline `<script>` for game logic
+- Separate JS files: `constants.js`, `particles.js`, `audio.js`
+- CSS in `ui.css`
+- Map defined as a PNG image (`map2.png`) where each pixel = one terrain tile
+
+## Architecture
+
+### Map system
+
+The map image is read at startup via `getImageData`. Each pixel's hex color maps to a terrain type via `MAP_COLORS` in `constants.js`. The raw pixel data is stored in `gameState.mapData` — the map image **is** the data, no object-per-tile array.
+
+Terrain lookups are O(1) via `getTerrainAt(worldX, worldY)` which converts world coordinates to a tile index and reads the pixel color directly.
+
+Only interactive tiles (scrap, barrel, circuit, artifact, tree, rock) get entity objects, stored in `gameState.entities` (a `Map` keyed by `"tileX,tileY"`).
+
+### Rendering
+
+`drawTerrain()` computes the visible tile range from the viewport and only iterates tiles on screen. Water tiles get animated wave effects. The same visible-range approach is used for fire particles in `particles.js`.
+
+### World coordinates
+
+- World center is `(0, 0)`, car starts there
+- Tile `(tx, ty)` maps to world position: `x = -worldWidth/2 + tx * 80`, `y = -worldHeight/2 + ty * 80`
+- `GAME_TILE_SIZE = 80` world units per tile
+
+### Key helper functions (global scope in index.html)
+
+- `worldToTile(worldX, worldY)` → `[tileX, tileY]`
+- `getTerrainTypeAtTile(tileX, tileY)` → terrain type string
+- `getTerrainAt(worldX, worldY)` → terrain type string
+- `getNearbyEntities(worldX, worldY, tileRadius)` → entity array
+
+## Adding new terrain types
+
+1. Pick a unique hex color for the map pixel
+2. Add the mapping in `constants.js` → `MAP_COLORS`
+3. Add a display color in `constants.js` → `TERRAIN_COLORS`
+4. If interactive (collectible/obstacle), add the type to `ENTITY_TYPES` in `index.html`
+5. Paint pixels in `map2.png` (or use `mapGenerator.html`)
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Main game (canvas, game loop, physics, UI) |
+| `constants.js` | Terrain colors, map color mappings, texture configs |
+| `particles.js` | Exhaust, handbrake smoke, fire, water splash particles |
+| `audio.js` | Sound manager using HTMLAudioElement |
+| `ui.css` | Sidebar, status bars, minimap styling |
+| `map2.png` | World map (each pixel = one 80-unit terrain tile) |
+| `mapGenerator.html` | Standalone tool to generate/convert map PNGs |
+
+## Conventions
+
+- No build step — open `index.html` directly or serve statically
+- No npm packages at runtime (audio uses `new Audio()`, not Web Audio fetch)
+- Keep all game logic in vanilla JS, no TypeScript
+- Pixel art style: `image-rendering: pixelated` for map/minimap

@@ -44,6 +44,21 @@
     }
 }
 
+#minimapContainer {
+    margin-bottom: 10px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    overflow: hidden;
+    line-height: 0;
+}
+
+#minimap {
+    width: 200px;
+    height: 200px;
+    display: block;
+    image-rendering: pixelated;
+}
+
 .stat {
     margin: 10px 0;
 }

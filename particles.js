@@ -157,23 +157,26 @@ function updateFireParticles(gameState) {
         p.size = p.size * (0.98 + (p.life * 0.01));  // Gradual size reduction tied to life
     });
 
-    // Add new particles for each fire tile
-    gameState.terrain.forEach(point => {
-        if (point.type === 'fire') {
-            // Only generate particles for tiles that are on screen
-            const screenX = point.x - gameState.viewport.x;
-            const screenY = point.y - gameState.viewport.y;
+    const md = gameState.mapData;
+    if (md) {
+        const ts = md.tileSize;
+        const hw = md.worldWidth / 2;
+        const hh = md.worldHeight / 2;
+        const sc = Math.max(0, Math.floor((gameState.viewport.x + hw) / ts) - 1);
+        const ec = Math.min(md.width - 1, Math.ceil((gameState.viewport.x + canvas.width + hw) / ts) + 1);
+        const sr = Math.max(0, Math.floor((gameState.viewport.y + hh) / ts) - 1);
+        const er = Math.min(md.height - 1, Math.ceil((gameState.viewport.y + canvas.height + hh) / ts) + 1);
 
-            if (screenX > -point.size && screenX < canvas.width + point.size &&
-                screenY > -point.size && screenY < canvas.height + point.size) {
-                // Add new particles (reduced count for less intensity)
-                const particleCount = 1;
-                for (let i = 0; i < particleCount; i++) {
-                    gameState.particles.fire.push(createFireParticle(point.x, point.y));
+        for (let ty = sr; ty <= er; ty++) {
+            for (let tx = sc; tx <= ec; tx++) {
+                if (getTerrainTypeAtTile(tx, ty) === 'fire') {
+                    const wx = -hw + tx * ts;
+                    const wy = -hh + ty * ts;
+                    gameState.particles.fire.push(createFireParticle(wx, wy));
                 }
             }
         }
-    });
+    }
 }
 
 function drawFireParticles(ctx, gameState) {
@@ -188,33 +191,39 @@ function drawFireParticles(ctx, gameState) {
         (timeOfDay >= 17 && timeOfDay < 18) ? (timeOfDay - 17) :
             (timeOfDay >= 5 && timeOfDay < 6) ? (6 - timeOfDay) : 0;
 
-    // Draw ambient glow for each fire source
     if (nightIntensity > 0) {
         ctx.globalCompositeOperation = 'lighter';
-        gameState.terrain.forEach(point => {
-            if (point.type === 'fire') {
-                const screenX = point.x - gameState.viewport.x;
-                const screenY = point.y - gameState.viewport.y;
+        const md = gameState.mapData;
+        if (md) {
+            const ts = md.tileSize;
+            const hw = md.worldWidth / 2;
+            const hh = md.worldHeight / 2;
+            const sc = Math.max(0, Math.floor((gameState.viewport.x + hw) / ts) - 2);
+            const ec = Math.min(md.width - 1, Math.ceil((gameState.viewport.x + canvas.width + hw) / ts) + 2);
+            const sr = Math.max(0, Math.floor((gameState.viewport.y + hh) / ts) - 2);
+            const er = Math.min(md.height - 1, Math.ceil((gameState.viewport.y + canvas.height + hh) / ts) + 2);
+            const flicker = Math.sin(Date.now() / 100) * 0.1 + 0.9;
+            const glowRadius = ts * 2;
 
-                // Simple flicker effect
-                const flicker = Math.sin(Date.now() / 100) * 0.1 + 0.9;
+            for (let ty = sr; ty <= er; ty++) {
+                for (let tx = sc; tx <= ec; tx++) {
+                    if (getTerrainTypeAtTile(tx, ty) === 'fire') {
+                        const screenX = -hw + tx * ts - gameState.viewport.x;
+                        const screenY = -hh + ty * ts - gameState.viewport.y;
 
-                // Solid glow circle - 2 tiles radius
-                const glowRadius = point.size * 2;
+                        ctx.fillStyle = `rgba(255, 30, 0, ${0.15 * nightIntensity * flicker})`;
+                        ctx.beginPath();
+                        ctx.arc(screenX, screenY, glowRadius, 0, Math.PI * 2);
+                        ctx.fill();
 
-                // First layer - red outer glow
-                ctx.fillStyle = `rgba(255, 30, 0, ${0.15 * nightIntensity * flicker})`;
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, glowRadius, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Second layer - orange inner glow
-                ctx.fillStyle = `rgba(255, 80, 0, ${0.12 * nightIntensity * flicker})`;
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, glowRadius * 0.5, 0, Math.PI * 2);
-                ctx.fill();
+                        ctx.fillStyle = `rgba(255, 80, 0, ${0.12 * nightIntensity * flicker})`;
+                        ctx.beginPath();
+                        ctx.arc(screenX, screenY, glowRadius * 0.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
             }
-        });
+        }
     }
 
     // Draw individual fire particles
@@ -322,46 +331,3 @@ function drawWaterSplashParticles(ctx, gameState) {
 
     ctx.restore();
 }
-
-function createCollisionParticles(gameState, impactX, impactY, carVelX, carVelY, obstacleType) {
-    // Calculate car's front position
-    const frontOffset = gameState.car.length / 2;
-    const startX = gameState.car.x + Math.sin(gameState.car.rotation) * frontOffset;
-    const startY = gameState.car.y - Math.cos(gameState.car.rotation) * frontOffset;
-
-    // Create particles in a forward cone
-    for (let i = 0; i < 12; i++) {
-        // Create particles in a 60-degree cone in the direction of travel
-        const spreadAngle = Math.PI / 6; // 30 degrees to each side
-        const baseAngle = Math.atan2(carVelY, carVelX);
-        const angle = baseAngle - spreadAngle / 2 + (spreadAngle * Math.random());
-
-        // Slower initial speed
-        const speed = 1 + Math.random() * 1.5;
-        gameState.particles.collision = gameState.particles.collision || [];
-        gameState.particles.collision.push({
-            x: startX,
-            y: startY,
-            vx: Math.cos(angle) * speed + carVelX * 0.3, // Reduced car velocity influence
-            vy: Math.sin(angle) * speed + carVelY * 0.3,
-            life: 60, // Longer life for slower movement
-            maxLife: 60,
-            size: 4,
-            color: obstacleType === 'block' ? '#888' : '#8B4513'
-        });
-    }
-}
-
-function updateCollisionParticles(gameState) {
-    if (gameState.particles.collision) {
-        gameState.particles.collision = gameState.particles.collision.filter(particle => {
-            particle.x += particle.vx;
-            particle.y += particle.vy;
-            particle.life--;
-            // Slower deceleration
-            particle.vx *= 0.96;
-            particle.vy *= 0.96;
-            return particle.life > 0;
-        });
-    }
-} 

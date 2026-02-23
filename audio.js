@@ -1,7 +1,6 @@
-// Sound System
 const SOUNDS = {
     engine: {
-        src: 'sounds/engine-loop.mp3',  // Using .ogg for better compression
+        src: 'sounds/engine-loop.mp3',
         loop: true,
         volume: 0.4
     },
@@ -19,28 +18,35 @@ const SOUNDS = {
     },
     drift: {
         src: 'sounds/tire-squeal.mp3',
-        //loop: true,
         volume: 0.3
     }
 };
 
 class AudioManager {
     constructor() {
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        this.soundBuffers = new Map();
-        this.activeSounds = new Map();
+        this.audioElements = new Map();
         this.isMuted = false;
-        this.masterVolume = this.audioContext.createGain();
-        this.masterVolume.connect(this.audioContext.destination);
+        this.masterVolume = 1;
     }
 
     async loadSounds() {
         for (const [key, sound] of Object.entries(SOUNDS)) {
             try {
-                const response = await fetch(sound.src);
-                const arrayBuffer = await response.arrayBuffer();
-                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-                this.soundBuffers.set(key, audioBuffer);
+                const audio = new Audio(sound.src);
+                audio.loop = !!sound.loop;
+                audio.volume = (sound.volume || 0.5) * this.masterVolume;
+                audio.preload = 'auto';
+
+                await new Promise((resolve) => {
+                    audio.addEventListener('canplaythrough', resolve, { once: true });
+                    audio.addEventListener('error', () => {
+                        console.warn(`Failed to load sound: ${key}`);
+                        resolve();
+                    }, { once: true });
+                    audio.load();
+                });
+
+                this.audioElements.set(key, audio);
             } catch (error) {
                 console.warn(`Failed to load sound: ${key}`);
             }
@@ -48,75 +54,53 @@ class AudioManager {
     }
 
     playSound(name, loop = false) {
-        if (!this.soundBuffers.has(name)) return;
+        if (!this.audioElements.has(name)) return;
 
-        // If it's a looping sound that's already playing, don't start it again
-        if (loop && this.activeSounds.has(name)) return;
+        const audio = this.audioElements.get(name);
 
-        const source = this.audioContext.createBufferSource();
-        source.buffer = this.soundBuffers.get(name);
+        if (loop && !audio.paused) return;
 
-        const gainNode = this.audioContext.createGain();
-        gainNode.gain.value = SOUNDS[name].volume || 0.5;
-
-        source.connect(gainNode);
-        gainNode.connect(this.masterVolume);
-
-        source.loop = loop;
-        source.start(0);
-
-        if (loop) {
-            this.activeSounds.set(name, { source, gainNode });
-        }
-
-        source.onended = () => {
-            if (!loop) {
-                source.disconnect();
-                gainNode.disconnect();
-            }
-        };
-
-        return { source, gainNode };
+        audio.loop = loop;
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
     }
 
     stopSound(name) {
-        if (this.activeSounds.has(name)) {
-            const { source, gainNode } = this.activeSounds.get(name);
-            source.stop();
-            source.disconnect();
-            gainNode.disconnect();
-            this.activeSounds.delete(name);
-        }
+        if (!this.audioElements.has(name)) return;
+
+        const audio = this.audioElements.get(name);
+        audio.pause();
+        audio.currentTime = 0;
     }
 
     updateEngineSound(speed) {
-        if (!this.activeSounds.has('engine')) return;
+        if (!this.audioElements.has('engine')) return;
 
-        const { source, gainNode } = this.activeSounds.get('engine');
+        const audio = this.audioElements.get('engine');
+        if (audio.paused) return;
+
         const absSpeed = Math.abs(speed);
-
-        // Adjust pitch based on speed
-        source.playbackRate.value = 0.5 + Math.min(absSpeed, 2) * 1.25;
-
-        // Adjust volume based on speed
-        gainNode.gain.value = Math.min(0.4, 0.2 + absSpeed * 0.1);
+        audio.playbackRate = 0.5 + Math.min(absSpeed, 2) * 1.25;
+        audio.volume = Math.min(0.4, 0.2 + absSpeed * 0.1) * this.masterVolume;
     }
 
     setMasterVolume(value) {
-        this.masterVolume.gain.value = value;
+        this.masterVolume = value;
+        for (const [key, audio] of this.audioElements) {
+            audio.volume = (SOUNDS[key].volume || 0.5) * this.masterVolume;
+        }
     }
 
     toggleMute() {
         this.isMuted = !this.isMuted;
-        this.masterVolume.gain.value = this.isMuted ? 0 : 1;
+        this.setMasterVolume(this.isMuted ? 0 : 1);
     }
 
     stopAllSounds() {
-        for (const [name] of this.activeSounds) {
+        for (const [name] of this.audioElements) {
             this.stopSound(name);
         }
     }
 }
 
-// Create and expose a single instance globally
-window.audioManager = new AudioManager(); 
+window.audioManager = new AudioManager();

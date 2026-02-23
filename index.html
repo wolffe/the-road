@@ -4,14 +4,14 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
-    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="shortcut icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <meta name="apple-mobile-web-app-title" content="The Road">
-    <link rel="manifest" href="/site.webmanifest">
+    <link rel="manifest" href="site.webmanifest">
 
-    <link rel="stylesheet" href="ui.css">
+    <link rel="stylesheet" href="ui.css" type="text/css">
 </head>
 
 <body>
@@ -20,6 +20,9 @@
         <div id="joystick"></div>
     </div>
     <div id="statusPanel">
+        <div id="minimapContainer">
+            <canvas id="minimap"></canvas>
+        </div>
         <div class="stat">
             <div>HP: <span id="hpText">100</span>/100</div>
             <div id="hpBar">
@@ -98,7 +101,7 @@
     <script src="constants.js?1"></script>
     <script src="particles.js"></script>
     <script src="audio.js"></script>
-    <script src="multiplayer.js"></script>
+
     <script>
         const canvas = document.createElement('canvas');
         document.getElementById('gameContainer').appendChild(canvas);
@@ -160,20 +163,16 @@
                 maxTrunkBattery: 500,
                 lastBatteryUse: Date.now(),
                 isEngineRunning: false,
-                powerFactor: 0.08,
-                turnSpeed: 0.01,
                 grip: 0.95,
                 exhaustParticles: [],
                 handbrakeParticles: [],
                 lightsOn: true,
                 isHandbrakeOn: false,
-                wasReversing: false,
-                brakingForce: 0.03,
-                isDrifting: false,
                 turnStartTime: 0,
                 isTurning: false
             },
-            terrain: [],
+            mapData: null,
+            entities: new Map(),
             tireTrackHistory: [],
             keys: {},
             viewport: { x: 0, y: 0 },  // Will be updated in generateTerrain
@@ -189,16 +188,62 @@
                 artifactsCollected: []
             },
             particles: {
-                exhaust: [],
-                handbrake: [],
                 fire: [],
                 water: []
             },
-            multiplayer: null
         };
 
         // Add map image to textures
-        TEXTURES.push({ type: 'map', src: 'https://cdn.glitch.global/29cd725d-6063-4944-99c6-03df924bf400/map2.png' });
+        TEXTURES.push({ type: 'map', src: 'map2.png' });
+
+        const ENTITY_TYPES = new Set(['scrap', 'barrel', 'circuit', 'artifact_heart', 'artifact_fuel', 'tree', 'rock']);
+
+        function worldToTile(worldX, worldY) {
+            const md = gameState.mapData;
+            if (!md) return [0, 0];
+            const tileX = Math.round((worldX + md.worldWidth / 2) / md.tileSize);
+            const tileY = Math.round((worldY + md.worldHeight / 2) / md.tileSize);
+            return [tileX, tileY];
+        }
+
+        function getTerrainTypeAtTile(tileX, tileY) {
+            const md = gameState.mapData;
+            if (!md || tileX < 0 || tileX >= md.width || tileY < 0 || tileY >= md.height) {
+                return 'unknown';
+            }
+            const i = (tileY * md.width + tileX) * 4;
+            const r = md.pixelData[i];
+            const g = md.pixelData[i + 1];
+            const b = md.pixelData[i + 2];
+            const hex = '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
+            return MAP_COLORS[hex] || 'unknown';
+        }
+
+        function getTerrainColorAtTile(tileX, tileY) {
+            const md = gameState.mapData;
+            if (!md || tileX < 0 || tileX >= md.width || tileY < 0 || tileY >= md.height) {
+                return '#333333';
+            }
+            const i = (tileY * md.width + tileX) * 4;
+            return `rgb(${md.pixelData[i]}, ${md.pixelData[i + 1]}, ${md.pixelData[i + 2]})`;
+        }
+
+        function getTerrainAt(worldX, worldY) {
+            const [tileX, tileY] = worldToTile(worldX, worldY);
+            return getTerrainTypeAtTile(tileX, tileY);
+        }
+
+        function getNearbyEntities(worldX, worldY, tileRadius) {
+            const [cx, cy] = worldToTile(worldX, worldY);
+            const results = [];
+            for (let dy = -tileRadius; dy <= tileRadius; dy++) {
+                for (let dx = -tileRadius; dx <= tileRadius; dx++) {
+                    const entity = gameState.entities.get(`${cx + dx},${cy + dy}`);
+                    if (entity) results.push(entity);
+                }
+            }
+            return results;
+        }
 
         // Handle keyboard input
         window.addEventListener('keydown', (e) => {
@@ -214,96 +259,67 @@
 
         // Update terrain generation to use image
         function generateTerrain() {
-            const GAME_TILE_SIZE = 80;  // Size of tiles in the game
+            const GAME_TILE_SIZE = 80;
 
             try {
                 const mapImage = images.map;
-                if (!mapImage || !mapImage.complete) {
-                    return;
-                }
+                if (!mapImage || !mapImage.complete) return;
 
                 const MAP_WIDTH = mapImage.width;
                 const MAP_HEIGHT = mapImage.height;
-
-                // Calculate the total world size based on map dimensions
                 const worldWidth = MAP_WIDTH * GAME_TILE_SIZE;
                 const worldHeight = MAP_HEIGHT * GAME_TILE_SIZE;
 
-                // Calculate starting position to center the map
-                const startX = -worldWidth / 2;
-                const startY = -worldHeight / 2;
-
-                // Only set initial position if car position hasn't been loaded
-                if (gameState.car.x === 0 && gameState.car.y === 0) {
-                    gameState.car.x = 0;
-                    gameState.car.y = 0;
-                }
-
-                // Update viewport to follow car
                 gameState.viewport.x = gameState.car.x - canvas.width / 2;
                 gameState.viewport.y = gameState.car.y - canvas.height / 2;
 
-                // Create temporary canvas to read map image
                 const mapCanvas = document.createElement('canvas');
                 const mapCtx = mapCanvas.getContext('2d', { willReadFrequently: true });
-
                 mapCanvas.width = MAP_WIDTH;
                 mapCanvas.height = MAP_HEIGHT;
                 mapCtx.drawImage(mapImage, 0, 0, MAP_WIDTH, MAP_HEIGHT);
 
                 const imageData = mapCtx.getImageData(0, 0, MAP_WIDTH, MAP_HEIGHT);
-                const data = imageData.data;
 
-                // Clear existing terrain
-                gameState.terrain = [];
+                gameState.mapData = {
+                    pixelData: imageData.data,
+                    width: MAP_WIDTH,
+                    height: MAP_HEIGHT,
+                    tileSize: GAME_TILE_SIZE,
+                    worldWidth: worldWidth,
+                    worldHeight: worldHeight
+                };
 
-                // Create tiles based on map dimensions
+                gameState.entities = new Map();
+
                 for (let y = 0; y < MAP_HEIGHT; y++) {
                     for (let x = 0; x < MAP_WIDTH; x++) {
-                        const i = (y * MAP_WIDTH + x) * 4;
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
+                        const terrainType = getTerrainTypeAtTile(x, y);
 
-                        // Convert RGB to hex color
-                        const hexColor = '#' +
-                            r.toString(16).padStart(2, '0') +
-                            g.toString(16).padStart(2, '0') +
-                            b.toString(16).padStart(2, '0');
+                        if (ENTITY_TYPES.has(terrainType)) {
+                            const worldX = -worldWidth / 2 + x * GAME_TILE_SIZE;
+                            const worldY = -worldHeight / 2 + y * GAME_TILE_SIZE;
 
-                        // Store original color and get terrain type if it exists
-                        const originalColor = `rgb(${r}, ${g}, ${b})`;
-                        let terrainType = MAP_COLORS[hexColor] || 'unknown';
-
-                        const worldX = startX + x * GAME_TILE_SIZE;
-                        const worldY = startY + y * GAME_TILE_SIZE;
-
-                        // Check if this artifact was previously collected
-                        let isCollected = false;
-                        if (terrainType === 'artifact_heart' || terrainType === 'artifact_fuel') {
-                            isCollected = gameState.stats.artifactsCollected.some(
-                                artifact => artifact.type === terrainType
-                            );
-                            if (isCollected) {
-                                terrainType = 'collected';
+                            let isCollected = false;
+                            if (terrainType === 'artifact_heart' || terrainType === 'artifact_fuel') {
+                                isCollected = gameState.stats.artifactsCollected.some(
+                                    a => a.type === terrainType
+                                );
                             }
+
+                            gameState.entities.set(`${x},${y}`, {
+                                type: isCollected ? 'collected' : terrainType,
+                                x: worldX,
+                                y: worldY,
+                                tileX: x,
+                                tileY: y,
+                                size: GAME_TILE_SIZE,
+                                active: !isCollected
+                            });
                         }
-
-                        const point = {
-                            x: worldX,
-                            y: worldY,
-                            type: terrainType,
-                            originalColor: originalColor,
-                            size: GAME_TILE_SIZE,
-                            active: !isCollected
-                        };
-
-                        gameState.terrain.push(point);
                     }
                 }
-
             } catch (error) {
-                // Error handling without console.error
                 return;
             }
         }
@@ -326,7 +342,6 @@
 
             // Get current time of day once
             const timeOfDay = gameState.time.current * 24;
-            const isNight = timeOfDay >= 18 || timeOfDay < 6;
             const now = Date.now();
 
             // Replenish resources from trunk when stopped
@@ -422,15 +437,6 @@
                 return;
             }
 
-            // Auto-repair using trunk scrap metal (1 HP per 10 seconds if damaged)
-            if (gameState.car.hp < 100 && gameState.car.trunk > 0) {
-                if (now - gameState.car.lastRepairTime >= 10000) { // 10 seconds
-                    gameState.car.hp += 1;
-                    gameState.car.trunk -= 1;
-                    gameState.car.lastRepairTime = now;
-                }
-            }
-
             // Handle controls with improved braking and reverse
             if (gameState.keys['ArrowUp']) {
                 gameState.car.acceleration = 0.2;
@@ -499,15 +505,9 @@
                 gameState.car.isTurning = false;
             }
 
-            // Check current terrain type
-            const carTerrain = gameState.terrain.find(point => {
-                const dx = point.x - gameState.car.x;
-                const dy = point.y - gameState.car.y;
-                return Math.sqrt(dx * dx + dy * dy) < point.size / 2;
-            });
+            const carTerrainType = getTerrainAt(gameState.car.x, gameState.car.y);
 
-            // Add garage regeneration
-            if (carTerrain && carTerrain.type === 'garage' && Math.abs(gameState.car.speed) < 0.1) {
+            if (carTerrainType === 'garage' && Math.abs(gameState.car.speed) < 0.1) {
                 if (now - gameState.car.lastRepairTime >= 2000) { // 2 seconds
                     // Regenerate HP
                     if (gameState.car.hp < 100) {
@@ -533,8 +533,8 @@
 
             // Apply terrain-specific speed modifiers
             let terrainSpeedMultiplier = 1;
-            if (carTerrain) {
-                switch (carTerrain.type) {
+            if (carTerrainType !== 'unknown') {
+                switch (carTerrainType) {
                     case 'mud':
                     case 'snow':
                         terrainSpeedMultiplier = 0.5;
@@ -553,13 +553,13 @@
             gameState.car.speed *= 0.95; // Friction
 
             // Add tire tracks for appropriate terrain
-            if (Math.abs(gameState.car.speed) > 0.1 && carTerrain && (
-                carTerrain.type === 'grass' ||
-                carTerrain.type === 'highgrass' ||
-                carTerrain.type === 'hill' ||
-                carTerrain.type === 'mud' ||
-                carTerrain.type === 'snow' ||
-                carTerrain.type === 'road'
+            if (Math.abs(gameState.car.speed) > 0.1 && (
+                carTerrainType === 'grass' ||
+                carTerrainType === 'highgrass' ||
+                carTerrainType === 'hill' ||
+                carTerrainType === 'mud' ||
+                carTerrainType === 'snow' ||
+                carTerrainType === 'road'
             )) {
                 const tireOffset = gameState.car.width * 0.4;
                 const cos = Math.cos(gameState.car.rotation);
@@ -577,9 +577,9 @@
                 gameState.tireTrackHistory.push({
                     left: { ...leftTire },
                     right: { ...rightTire },
-                    age: carTerrain.type === 'road' ? 900 : // Longer lasting on road
-                        carTerrain.type === 'mud' || carTerrain.type === 'snow' ? 600 : 300,
-                    type: carTerrain.type
+                    age: carTerrainType === 'road' ? 900 :
+                        carTerrainType === 'mud' || carTerrainType === 'snow' ? 600 : 300,
+                    type: carTerrainType
                 });
             }
 
@@ -588,51 +588,36 @@
                 .map(track => ({ ...track, age: track.age - 1 }))
                 .filter(track => track.age > 0);
 
-            // Store previous position for collision resolution
-            const prevX = gameState.car.x;
-            const prevY = gameState.car.y;
-
             // Update position
             gameState.car.x += Math.sin(gameState.car.rotation) * gameState.car.speed;
             gameState.car.y -= Math.cos(gameState.car.rotation) * gameState.car.speed;
 
-            // Apply water and deep water damage
-            if (carTerrain) {
-                if (carTerrain.type === 'water') {
-                    // Apply damage every second
-                    if (now - gameState.car.lastDamageTime > 1000) {
-                        gameState.car.hp -= 1;
-                        gameState.car.lastDamageTime = now;
-                    }
-                    gameState.car.speed *= 0.8;
-                    // Create water splash particles if moving
-                    if (Math.abs(gameState.car.speed) > 0.1) {
-                        createWaterSplashParticle(gameState);
-                        audioManager.playSound('splash');
-                    }
-                } else if (carTerrain.type === 'deepwater') {
-                    if (now - gameState.car.lastDamageTime > 1000) {
-                        gameState.car.hp -= 10;
-                        gameState.car.lastDamageTime = now;
-                    }
-                    gameState.car.speed *= 0.6;
-                    if (Math.abs(gameState.car.speed) > 0.1) {
-                        createWaterSplashParticle(gameState);
-                        createWaterSplashParticle(gameState);
-                        audioManager.playSound('splash');
-                    }
+            if (carTerrainType === 'water') {
+                if (now - gameState.car.lastDamageTime > 1000) {
+                    gameState.car.hp -= 1;
+                    gameState.car.lastDamageTime = now;
+                }
+                gameState.car.speed *= 0.8;
+                if (Math.abs(gameState.car.speed) > 0.1) {
+                    createWaterSplashParticle(gameState);
+                    audioManager.playSound('splash');
+                }
+            } else if (carTerrainType === 'deepwater') {
+                if (now - gameState.car.lastDamageTime > 1000) {
+                    gameState.car.hp -= 10;
+                    gameState.car.lastDamageTime = now;
+                }
+                gameState.car.speed *= 0.6;
+                if (Math.abs(gameState.car.speed) > 0.1) {
+                    createWaterSplashParticle(gameState);
+                    createWaterSplashParticle(gameState);
+                    audioManager.playSound('splash');
                 }
             }
 
-            // Handle collisions with trees and rocks
-            const nearbyTerrain = gameState.terrain.filter(point => {
-                const dx = point.x - gameState.car.x;
-                const dy = point.y - gameState.car.y;
-                return Math.sqrt(dx * dx + dy * dy) < point.size;  // Check within a larger radius
-            });
+            const nearbyEntities = getNearbyEntities(gameState.car.x, gameState.car.y, 1);
 
-            // Check all nearby obstacles
-            for (const point of nearbyTerrain) {
+            for (const point of nearbyEntities) {
                 if ((point.type === 'tree' || point.type === 'rock') && point.active) {
                     const dx = point.x - gameState.car.x;
                     const dy = point.y - gameState.car.y;
@@ -675,7 +660,7 @@
             document.getElementById('speedText').textContent = Math.abs(Math.round(gameState.car.speed * 50));
             document.getElementById('posX').textContent = Math.round(gameState.car.x);
             document.getElementById('posY').textContent = Math.round(gameState.car.y);
-            document.getElementById('terrainText').textContent = carTerrain ? carTerrain.type : 'unknown';
+            document.getElementById('terrainText').textContent = carTerrainType;
             document.getElementById('trunkText').textContent = gameState.car.trunk;
             document.getElementById('maxTrunkText').textContent = gameState.car.maxTrunk;
             document.getElementById('trunkFuelText').textContent = gameState.car.trunkFuel;
@@ -693,141 +678,82 @@
                 hpBarFill.style.background = '#f00';
             }
 
-            // Check for scrap metal collection
-            gameState.terrain.forEach(point => {
-                if ((point.type === 'scrap' || point.type === 'artifact_heart' || point.type === 'artifact_fuel') && point.active) {
-                    const dx = point.x - gameState.car.x;
-                    const dy = point.y - gameState.car.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < point.size / 2) {
-                        if (point.type === 'artifact_heart') {
-                            // Heart artifact effect
-                            gameState.car.hp = 100;  // Full HP
-                            gameState.car.trunk = Math.min(
-                                gameState.car.trunk + 250,
-                                gameState.car.maxTrunk
-                            );
-                            // Add to collected artifacts
-                            gameState.stats.artifactsCollected.push({
-                                type: 'artifact_heart',
-                                name: 'The Heart',
-                                collectedAt: Date.now()
-                            });
-                            showNotification('The Heart collected: Full HP + 250 Scrap!');
-                            saveGame();  // Save progress when artifact is collected
-                            point.type = 'collected';  // Change the tile to collected after collection
-                        } else if (point.type === 'artifact_fuel') {
-                            // Fuel artifact effect
-                            gameState.car.trunkFuel = Math.min(
-                                gameState.car.trunkFuel + 250,
-                                gameState.car.maxTrunkFuel
-                            );
-                            // Add to collected artifacts
-                            gameState.stats.artifactsCollected.push({
-                                type: 'artifact_fuel',
-                                name: 'The Fuel Crystal',
-                                collectedAt: Date.now()
-                            });
-                            showNotification('The Fuel Crystal collected: +250 Fuel to trunk!');
-                            saveGame();  // Save progress when artifact is collected
-                            point.type = 'collected';  // Change the tile to collected after collection
-                        } else {
-                            // Normal scrap collection logic
-                            const hpNeeded = 100 - gameState.car.hp;
-                            if (hpNeeded > 0) {
-                                gameState.car.hp += 10;
-                                showNotification('Scrap collected: +10 HP');
-                                if (gameState.car.hp > 100) {
-                                    const excess = gameState.car.hp - 100;
-                                    gameState.car.hp = 100;
-                                    gameState.car.trunk = Math.min(
-                                        gameState.car.trunk + excess,
-                                        gameState.car.maxTrunk
-                                    );
-                                    showNotification(`Excess scrap stored in trunk: +${excess}`);
-                                }
-                            } else {
-                                gameState.car.trunk = Math.min(
-                                    gameState.car.trunk + 10,
-                                    gameState.car.maxTrunk
-                                );
-                                showNotification('Scrap stored in trunk: +10');
-                            }
-                        }
-                        point.active = false; // Deactivate collected item
-                    }
-                }
-            });
+            for (const point of nearbyEntities) {
+                if (!point.active) continue;
+                const dx = point.x - gameState.car.x;
+                const dy = point.y - gameState.car.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance >= point.size / 2) continue;
 
-            // Check for barrel collection
-            gameState.terrain.forEach(point => {
-                if (point.type === 'barrel' && point.active) {
-                    const dx = point.x - gameState.car.x;
-                    const dy = point.y - gameState.car.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < point.size / 2) {
-                        // Calculate how much fuel tank needs
-                        const fuelNeeded = gameState.car.maxFuel - gameState.car.fuel;
-                        if (fuelNeeded > 0) {
-                            gameState.car.fuel += 10;
-                            showNotification('Fuel collected: +10');
-                            if (gameState.car.fuel > gameState.car.maxFuel) {
-                                // Store excess in trunk
-                                const excess = gameState.car.fuel - gameState.car.maxFuel;
-                                gameState.car.fuel = gameState.car.maxFuel;
-                                gameState.car.trunkFuel = Math.min(
-                                    gameState.car.trunkFuel + excess,
-                                    gameState.car.maxTrunkFuel
-                                );
-                                showNotification(`Excess fuel stored in trunk: +${excess}`);
-                            }
-                        } else {
-                            // Store all in trunk if tank is full
-                            gameState.car.trunkFuel = Math.min(
-                                gameState.car.trunkFuel + 10,
-                                gameState.car.maxTrunkFuel
-                            );
-                            showNotification('Fuel stored in trunk: +10');
+                if (point.type === 'artifact_heart') {
+                    gameState.car.hp = 100;
+                    gameState.car.trunk = Math.min(gameState.car.trunk + 250, gameState.car.maxTrunk);
+                    gameState.stats.artifactsCollected.push({
+                        type: 'artifact_heart', name: 'The Heart', collectedAt: Date.now()
+                    });
+                    showNotification('The Heart collected: Full HP + 250 Scrap!');
+                    saveGame();
+                    point.type = 'collected';
+                    point.active = false;
+                } else if (point.type === 'artifact_fuel') {
+                    gameState.car.trunkFuel = Math.min(gameState.car.trunkFuel + 250, gameState.car.maxTrunkFuel);
+                    gameState.stats.artifactsCollected.push({
+                        type: 'artifact_fuel', name: 'The Fuel Crystal', collectedAt: Date.now()
+                    });
+                    showNotification('The Fuel Crystal collected: +250 Fuel to trunk!');
+                    saveGame();
+                    point.type = 'collected';
+                    point.active = false;
+                } else if (point.type === 'scrap') {
+                    const hpNeeded = 100 - gameState.car.hp;
+                    if (hpNeeded > 0) {
+                        gameState.car.hp += 10;
+                        showNotification('Scrap collected: +10 HP');
+                        if (gameState.car.hp > 100) {
+                            const excess = gameState.car.hp - 100;
+                            gameState.car.hp = 100;
+                            gameState.car.trunk = Math.min(gameState.car.trunk + excess, gameState.car.maxTrunk);
+                            showNotification(`Excess scrap stored in trunk: +${excess}`);
                         }
-                        point.active = false; // Deactivate collected barrel
+                    } else {
+                        gameState.car.trunk = Math.min(gameState.car.trunk + 10, gameState.car.maxTrunk);
+                        showNotification('Scrap stored in trunk: +10');
                     }
-                }
-            });
-
-            // Check for circuit collection
-            gameState.terrain.forEach(point => {
-                if (point.type === 'circuit' && point.active) {
-                    const dx = point.x - gameState.car.x;
-                    const dy = point.y - gameState.car.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < point.size / 2) {
-                        // Calculate how much battery needs
-                        const batteryNeeded = gameState.car.maxBattery - gameState.car.battery;
-                        if (batteryNeeded > 0) {
-                            gameState.car.battery += 10;
-                            showNotification('Circuit collected: +10 Battery');
-                            if (gameState.car.battery > gameState.car.maxBattery) {
-                                // Store excess in trunk
-                                const excess = gameState.car.battery - gameState.car.maxBattery;
-                                gameState.car.battery = gameState.car.maxBattery;
-                                gameState.car.trunkBattery = Math.min(
-                                    gameState.car.trunkBattery + excess,
-                                    gameState.car.maxTrunkBattery
-                                );
-                                showNotification(`Excess circuits stored in trunk: +${excess}`);
-                            }
-                        } else {
-                            // Store all in trunk if battery is full
-                            gameState.car.trunkBattery = Math.min(
-                                gameState.car.trunkBattery + 10,
-                                gameState.car.maxTrunkBattery
-                            );
-                            showNotification('Circuits stored in trunk: +10');
+                    point.active = false;
+                } else if (point.type === 'barrel') {
+                    const fuelNeeded = gameState.car.maxFuel - gameState.car.fuel;
+                    if (fuelNeeded > 0) {
+                        gameState.car.fuel += 10;
+                        showNotification('Fuel collected: +10');
+                        if (gameState.car.fuel > gameState.car.maxFuel) {
+                            const excess = gameState.car.fuel - gameState.car.maxFuel;
+                            gameState.car.fuel = gameState.car.maxFuel;
+                            gameState.car.trunkFuel = Math.min(gameState.car.trunkFuel + excess, gameState.car.maxTrunkFuel);
+                            showNotification(`Excess fuel stored in trunk: +${excess}`);
                         }
-                        point.active = false; // Deactivate collected circuit
+                    } else {
+                        gameState.car.trunkFuel = Math.min(gameState.car.trunkFuel + 10, gameState.car.maxTrunkFuel);
+                        showNotification('Fuel stored in trunk: +10');
                     }
+                    point.active = false;
+                } else if (point.type === 'circuit') {
+                    const batteryNeeded = gameState.car.maxBattery - gameState.car.battery;
+                    if (batteryNeeded > 0) {
+                        gameState.car.battery += 10;
+                        showNotification('Circuit collected: +10 Battery');
+                        if (gameState.car.battery > gameState.car.maxBattery) {
+                            const excess = gameState.car.battery - gameState.car.maxBattery;
+                            gameState.car.battery = gameState.car.maxBattery;
+                            gameState.car.trunkBattery = Math.min(gameState.car.trunkBattery + excess, gameState.car.maxTrunkBattery);
+                            showNotification(`Excess circuits stored in trunk: +${excess}`);
+                        }
+                    } else {
+                        gameState.car.trunkBattery = Math.min(gameState.car.trunkBattery + 10, gameState.car.maxTrunkBattery);
+                        showNotification('Circuits stored in trunk: +10');
+                    }
+                    point.active = false;
                 }
-            });
+            }
 
             // Update time of day text
             let dayPhase;
@@ -838,13 +764,6 @@
             else if (timeOfDay >= 17 && timeOfDay < 20) dayPhase = "Dusk";
             else if (timeOfDay >= 20 || timeOfDay < 5) dayPhase = "Night";
             document.getElementById('dayPhaseText').textContent = dayPhase;
-
-            // Get current terrain
-            const currentTerrain = gameState.terrain.find(point => {
-                const dx = point.x - gameState.car.x;
-                const dy = point.y - gameState.car.y;
-                return Math.sqrt(dx * dx + dy * dy) < point.size / 2;
-            });
 
             // Calculate distance moved this frame
             const distanceMoved = Math.abs(gameState.car.speed) / 1000; // Convert to kilometers
@@ -1095,7 +1014,81 @@
             ctx.restore();
         }
 
-        // Now the game loop and other functions can use these
+        const MINIMAP_SIZE = 200;
+        const MINIMAP_ZOOM = 3;
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        let minimapImageReady = false;
+        let minimapImageData = null;
+
+        minimapCanvas.width = MINIMAP_SIZE;
+        minimapCanvas.height = MINIMAP_SIZE;
+
+        function initMinimap() {
+            const mapImage = images.map;
+            if (!mapImage || !mapImage.complete) return;
+
+            const tmpCanvas = document.createElement('canvas');
+            tmpCanvas.width = mapImage.width;
+            tmpCanvas.height = mapImage.height;
+            const tmpCtx = tmpCanvas.getContext('2d');
+            tmpCtx.drawImage(mapImage, 0, 0);
+            minimapImageData = tmpCanvas;
+            minimapImageReady = true;
+        }
+
+        function drawMinimap() {
+            if (!minimapImageReady) {
+                initMinimap();
+                if (!minimapImageReady) return;
+            }
+
+            const md = gameState.mapData;
+            if (!md) return;
+
+            const playerTX = (gameState.car.x + md.worldWidth / 2) / md.tileSize;
+            const playerTY = (gameState.car.y + md.worldHeight / 2) / md.tileSize;
+
+            const viewTiles = MINIMAP_SIZE / MINIMAP_ZOOM;
+            const srcX = playerTX - viewTiles / 2;
+            const srcY = playerTY - viewTiles / 2;
+
+            minimapCtx.fillStyle = '#333';
+            minimapCtx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+
+            minimapCtx.drawImage(
+                minimapImageData,
+                srcX, srcY, viewTiles, viewTiles,
+                0, 0, MINIMAP_SIZE, MINIMAP_SIZE
+            );
+
+            const vpLeft = ((gameState.viewport.x + md.worldWidth / 2) / md.tileSize - srcX) * MINIMAP_ZOOM;
+            const vpTop = ((gameState.viewport.y + md.worldHeight / 2) / md.tileSize - srcY) * MINIMAP_ZOOM;
+            const vpW = (canvas.width / md.tileSize) * MINIMAP_ZOOM;
+            const vpH = (canvas.height / md.tileSize) * MINIMAP_ZOOM;
+
+            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.strokeRect(vpLeft, vpTop, vpW, vpH);
+
+            minimapCtx.save();
+            minimapCtx.translate(MINIMAP_SIZE / 2, MINIMAP_SIZE / 2);
+            minimapCtx.rotate(gameState.car.rotation);
+
+            minimapCtx.beginPath();
+            minimapCtx.moveTo(0, -6);
+            minimapCtx.lineTo(-4, 5);
+            minimapCtx.lineTo(4, 5);
+            minimapCtx.closePath();
+            minimapCtx.fillStyle = '#ff0';
+            minimapCtx.fill();
+            minimapCtx.strokeStyle = '#000';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.stroke();
+
+            minimapCtx.restore();
+        }
+
         function gameLoop(timestamp) {
             // Update time
             updateTime();
@@ -1193,15 +1186,8 @@
             // Update artifacts display
             updateArtifactsDisplay();
 
-            // Update server with player state
-            if (gameState.multiplayer) {
-                gameState.multiplayer.updateServer();
-            }
-
-            // Draw other players after darkness but before particles
-            if (gameState.multiplayer) {
-                gameState.multiplayer.drawOtherPlayers(ctx);
-            }
+            // Draw minimap
+            drawMinimap();
 
             // Request next frame
             requestAnimationFrame(gameLoop);
@@ -1226,81 +1212,60 @@
                 `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
         }
 
-        // Update drawTerrain function
         function drawTerrain() {
-            // Draw a background
             ctx.fillStyle = '#333333';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Get current time for water animation
-            const waterAnimTime = Date.now() / 1000; // Convert to seconds for smoother animation
+            const md = gameState.mapData;
+            if (!md) return;
 
-            gameState.terrain.forEach(point => {
-                const screenX = point.x - gameState.viewport.x;
-                const screenY = point.y - gameState.viewport.y;
+            const waterAnimTime = Date.now() / 1000;
+            const ts = md.tileSize;
+            const halfWorld = { x: md.worldWidth / 2, y: md.worldHeight / 2 };
 
-                // Relaxed culling to make sure we're not accidentally culling too much
-                if (screenX < -point.size * 2 || screenX > canvas.width + point.size * 2 ||
-                    screenY < -point.size * 2 || screenY > canvas.height + point.size * 2) {
-                    return;
-                }
+            const startCol = Math.max(0, Math.floor((gameState.viewport.x + halfWorld.x) / ts) - 1);
+            const endCol = Math.min(md.width - 1, Math.ceil((gameState.viewport.x + canvas.width + halfWorld.x) / ts) + 1);
+            const startRow = Math.max(0, Math.floor((gameState.viewport.y + halfWorld.y) / ts) - 1);
+            const endRow = Math.min(md.height - 1, Math.ceil((gameState.viewport.y + canvas.height + halfWorld.y) / ts) + 1);
 
-                // If it's a collectible that's been collected, show grey texture
-                if ((point.type === 'scrap' || point.type === 'circuit' || point.type === 'barrel') && !point.active) {
-                    ctx.fillStyle = TERRAIN_COLORS.collected;
-                    ctx.fillRect(screenX - point.size / 2, screenY - point.size / 2, point.size, point.size);
-                } else {
-                    // If it's a known terrain type, use TERRAIN_COLORS, otherwise use the original map color
-                    const baseColor = TERRAIN_COLORS[point.type] || point.originalColor || '#00aa00';
+            for (let ty = startRow; ty <= endRow; ty++) {
+                for (let tx = startCol; tx <= endCol; tx++) {
+                    const worldX = -halfWorld.x + tx * ts;
+                    const worldY = -halfWorld.y + ty * ts;
+                    const screenX = worldX - gameState.viewport.x;
+                    const screenY = worldY - gameState.viewport.y;
 
-                    // Special handling for water animation only
-                    if (point.type === 'water' || point.type === 'deepwater') {
-                        // Create wave effect using sine waves with larger amplitude
-                        const waveX = Math.sin(point.x / 80 + waterAnimTime * 2) * 0.8;
-                        const waveY = Math.cos(point.y / 80 + waterAnimTime * 2) * 0.8;
-                        const wave = (waveX + waveY) * 0.7;
+                    const entity = gameState.entities.get(`${tx},${ty}`);
 
-                        // Add ripple effect with larger radius
-                        const ripple = Math.sin(
-                            Math.sqrt(
-                                Math.pow(point.x / 60, 2) +
-                                Math.pow(point.y / 60, 2)
-                            ) - waterAnimTime * 3
-                        ) * 0.6;
-
-                        // Combine effects with higher intensity
-                        const combinedEffect = (wave + ripple);
-
-                        if (point.type === 'water') {
-                            // Brighter blue variations for water
-                            ctx.fillStyle = `rgb(40, 40, ${Math.min(255, 255 + combinedEffect * 60)})`;
-                        } else { // deepwater
-                            // Darker blue variations for deep water
-                            ctx.fillStyle = `rgb(0, 0, ${Math.min(180, 102 + combinedEffect * 50)})`;
-                        }
+                    if (entity && !entity.active) {
+                        ctx.fillStyle = TERRAIN_COLORS.collected;
                     } else {
-                        ctx.fillStyle = baseColor;
+                        const terrainType = getTerrainTypeAtTile(tx, ty);
+
+                        if (terrainType === 'water' || terrainType === 'deepwater') {
+                            const waveX = Math.sin(worldX / 80 + waterAnimTime * 2) * 0.8;
+                            const waveY = Math.cos(worldY / 80 + waterAnimTime * 2) * 0.8;
+                            const wave = (waveX + waveY) * 0.7;
+                            const ripple = Math.sin(
+                                Math.sqrt(Math.pow(worldX / 60, 2) + Math.pow(worldY / 60, 2)) - waterAnimTime * 3
+                            ) * 0.6;
+                            const combinedEffect = wave + ripple;
+
+                            if (terrainType === 'water') {
+                                ctx.fillStyle = `rgb(40, 40, ${Math.min(255, 255 + combinedEffect * 60)})`;
+                            } else {
+                                ctx.fillStyle = `rgb(0, 0, ${Math.min(180, 102 + combinedEffect * 50)})`;
+                            }
+                        } else {
+                            ctx.fillStyle = TERRAIN_COLORS[terrainType] || getTerrainColorAtTile(tx, ty);
+                        }
                     }
 
-                    ctx.fillRect(screenX - point.size / 2, screenY - point.size / 2, point.size, point.size);
-
-                    // Draw texture without blend mode if available
-                    /*
-                      if (images[point.type]?.complete) {
-                          ctx.drawImage(
-                              images[point.type],
-                              screenX - point.size / 2,
-                              screenY - point.size / 2,
-                              point.size,
-                              point.size
-                          );
-                      }
-                      /**/
+                    ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
                 }
-            });
+            }
         }
 
-        // Add save function (after gameState definition)
         function saveGame() {
             const saveData = {
                 position: {
@@ -1370,11 +1335,8 @@
                 loadImages(),
                 audioManager.loadSounds()
             ]);
-            generateTerrain();  // Generate terrain first
-            loadGame();         // Then load saved game state
-
-            // Initialize multiplayer after loading game state
-            gameState.multiplayer = new MultiplayerManager(gameState);
+            generateTerrain();
+            loadGame();
 
             // Make sure viewport is centered on car
             gameState.viewport.x = gameState.car.x - canvas.width / 2;
@@ -1442,54 +1404,8 @@
 
         function eraseSave() {
             if (confirm('Are you sure you want to erase your saved game? This cannot be undone!')) {
-                // Clear localStorage
                 localStorage.removeItem('carGameSave');
-
-                // Reset car state
-                gameState.car.x = canvas.width / 2;
-                gameState.car.y = canvas.height / 2;
-                gameState.car.rotation = 0;
-                gameState.car.speed = 0;
-                gameState.car.acceleration = 0;
-                gameState.car.hp = 100;
-                gameState.car.fuel = 100;
-                gameState.car.battery = 100;
-                gameState.car.trunk = 0;
-                gameState.car.trunkFuel = 0;
-                gameState.car.trunkBattery = 0;
-                gameState.car.isEngineRunning = false;
-                gameState.car.handbrake = false;
-                gameState.car.fuelMode = true;
-                gameState.car.batteryMode = false;
-                gameState.car.portalMode = false;
-
-                // Reset game stats
-                gameState.time.totalSeconds = 0;
-                gameState.stats.totalDistance = 0;
-                gameState.stats.artifactsCollected = [];
-
-                // Reset time of day
-                gameState.time.current = 0.5; // Start at noon
-
-                // Reset UI elements
-                document.getElementById('hpText').textContent = '100';
-                document.getElementById('hpBarFill').style.width = '100%';
-                document.getElementById('fuelText').textContent = '100';
-                document.getElementById('fuelBarFill').style.width = '100%';
-                document.getElementById('batteryText').textContent = '100';
-                document.getElementById('batteryBarFill').style.width = '100%';
-                document.getElementById('trunkText').textContent = '0';
-                document.getElementById('trunkFuelText').textContent = '0';
-                document.getElementById('trunkBatteryText').textContent = '0';
-                document.getElementById('distance').textContent = '0';
-                document.getElementById('items').textContent = '0';
-                document.getElementById('time').textContent = '0:00';
-
-                // Generate new terrain
-                generateTerrain();
-
-                // Show confirmation message
-                alert('Game save erased successfully!');
+                restartGame();
             }
         }
 
