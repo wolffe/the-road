@@ -15,11 +15,15 @@
 </head>
 
 <body>
-    <div id="gameContainer">
-        <!-- Single joystick container -->
-        <div id="joystick"></div>
-    </div>
-    <div id="statusPanel">
+    <div id="appLayout">
+        <div id="gameColumn">
+            <div id="gameContainer"></div>
+        </div>
+        <aside id="statusPanel">
+        <button type="button" id="mobilePanelToggle" class="mobile-panel-toggle" aria-expanded="false" aria-controls="statusPanel">
+            <span class="mobile-panel-toggle-label">Stats</span>
+            <span class="mobile-panel-toggle-icon" aria-hidden="true">▲</span>
+        </button>
         <div id="minimapContainer">
             <canvas id="minimap"></canvas>
         </div>
@@ -78,9 +82,22 @@
             <button onclick="saveGame()">Save Game</button>
             <button onclick="eraseSave()" class="danger-button">Erase Save</button>
         </div>
+        </aside>
     </div>
 
-    <div id="towHint" style="position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    <div id="mobileTouchControls" class="mobile-touch-controls" aria-label="Driving controls">
+        <div class="touch-pad touch-pad-steer">
+            <button type="button" class="touch-btn" id="touchLeft" aria-label="Steer left">◀</button>
+            <button type="button" class="touch-btn" id="touchRight" aria-label="Steer right">▶</button>
+        </div>
+        <div class="touch-pad touch-pad-pedals">
+            <button type="button" class="touch-btn touch-btn-pedal" id="touchBrake" aria-label="Brake / reverse">▼</button>
+            <button type="button" class="touch-btn touch-btn-pedal touch-btn-primary" id="touchAccel" aria-label="Accelerate">▲</button>
+        </div>
+    </div>
+
+    <div id="towHint" class="tow-hint"
+         style="position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
          background: rgba(0,0,0,0.7); color: #4488aa; padding: 8px 16px; border-radius: 5px;
          display: none; z-index: 1000; font-family: monospace; font-size: 14px;">
         Press T to tow
@@ -91,8 +108,10 @@
          display: none; z-index: 1000; font-family: monospace;">
     </div>
 
+    <div id="mobileRotateHint" class="mobile-rotate-hint">Best in portrait — rotate your device</div>
+
     <div id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-         background: #111; z-index: 3000; display: flex; align-items: center; justify-content: center;
+         background: #111; z-index: 5000; display: flex; align-items: center; justify-content: center;
          font-family: monospace; color: #888; font-size: 16px;">
         Loading...
     </div>
@@ -138,14 +157,62 @@
         ctx.webkitImageSmoothingEnabled = false;
         ctx.msImageSmoothingEnabled = false;
 
+        const MOBILE_MAX_WIDTH = 767;
+
+        function isMobileLayout() {
+            return window.innerWidth <= MOBILE_MAX_WIDTH;
+        }
+
+        function updateMobileLayoutClass() {
+            document.body.classList.toggle('mobile-layout', isMobileLayout());
+        }
+
+        function getMobileChromeHeight() {
+            if (!isMobileLayout()) return 0;
+            const controls = document.getElementById('mobileTouchControls');
+            const panel = document.getElementById('statusPanel');
+            let h = 0;
+            if (controls) h += controls.getBoundingClientRect().height;
+            if (panel) h += panel.getBoundingClientRect().height;
+            return Math.ceil(h);
+        }
+
         function resizeCanvas() {
-            canvas.width = window.innerWidth - 240;
-            canvas.height = window.innerHeight;
+            updateMobileLayoutClass();
+            if (isMobileLayout()) {
+                const chrome = getMobileChromeHeight();
+                const h = Math.max(120, window.innerHeight - (chrome || 148));
+                canvas.width = window.innerWidth;
+                canvas.height = h;
+            } else {
+                canvas.width = window.innerWidth - 240;
+                canvas.height = window.innerHeight;
+            }
             ctx.imageSmoothingEnabled = false;
         }
 
         resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        function bindTouchDrivingButton(el, key) {
+            if (!el) return;
+            const down = (e) => {
+                e.preventDefault();
+                gameState.keys[key] = true;
+            };
+            const up = (e) => {
+                e.preventDefault();
+                gameState.keys[key] = false;
+            };
+            el.addEventListener('touchstart', down, { passive: false });
+            el.addEventListener('touchend', up);
+            el.addEventListener('touchcancel', up);
+            el.addEventListener('mousedown', down);
+            el.addEventListener('mouseup', up);
+            el.addEventListener('mouseleave', up);
+        }
 
         // Initialize images object
         const images = {};
@@ -215,6 +282,23 @@
                 ropeLength: 60,
             },
         };
+
+        bindTouchDrivingButton(document.getElementById('touchLeft'), 'ArrowLeft');
+        bindTouchDrivingButton(document.getElementById('touchRight'), 'ArrowRight');
+        bindTouchDrivingButton(document.getElementById('touchAccel'), 'ArrowUp');
+        bindTouchDrivingButton(document.getElementById('touchBrake'), 'ArrowDown');
+
+        (function initMobilePanelToggle() {
+            const toggle = document.getElementById('mobilePanelToggle');
+            const panel = document.getElementById('statusPanel');
+            if (!toggle || !panel) return;
+            toggle.addEventListener('click', () => {
+                const expanded = panel.classList.toggle('mobile-expanded');
+                toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                requestAnimationFrame(() => resizeCanvas());
+            });
+        })();
+
         function worldToTile(worldX, worldY) {
             return [Math.round(worldX / TILE_SIZE), Math.round(worldY / TILE_SIZE)];
         }
@@ -1556,6 +1640,8 @@
                 loadImages(),
                 audioManager.loadSounds()
             ]);
+            resizeCanvas();
+            requestAnimationFrame(() => resizeCanvas());
             engineSystem.init();
             tireSystem.init();
             carSystem.init();
@@ -1569,6 +1655,7 @@
             gameState.viewport.y = gameState.car.y - canvas.height / 2;
 
             document.getElementById('loadingOverlay').style.display = 'none';
+            requestAnimationFrame(() => resizeCanvas());
         };
 
         // Update loadImages function
@@ -1684,6 +1771,7 @@
 
             document.getElementById('gameOverOverlay').style.display = 'none';
 
+            resizeCanvas();
             generateTerrain();
         }
     </script>
