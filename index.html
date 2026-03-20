@@ -25,20 +25,20 @@
         </div>
         <div class="stat">
             <div>HP: <span id="hpText">100</span>/100</div>
-            <div id="hpBar">
-                <div id="hpBarFill"></div>
+            <div id="hpBar" class="bar-wrap">
+                <div id="hpBarFill" class="bar-fill"></div>
             </div>
         </div>
         <div class="stat">
             <div>Battery: <span id="batteryText">100</span>/100</div>
-            <div id="batteryBar">
-                <div id="batteryBarFill"></div>
+            <div id="batteryBar" class="bar-wrap">
+                <div id="batteryBarFill" class="bar-fill"></div>
             </div>
         </div>
         <div class="stat">
             <div>Fuel: <span id="fuelText">100</span>/100</div>
-            <div id="fuelBar">
-                <div id="fuelBarFill"></div>
+            <div id="fuelBar" class="bar-wrap">
+                <div id="fuelBarFill" class="bar-fill"></div>
             </div>
         </div>
         <div class="stat">Speed: <span id="speedText">0</span> km/h</div>
@@ -46,7 +46,18 @@
             X: <span id="posX">0</span><br>
             Y: <span id="posY">0</span>
         </div>
-        <div class="stat">Terrain: <span id="terrainText">grass</span></div>
+
+        <details>
+            <summary>Stats</summary>
+            <div class="stat">Terrain: <span id="terrainText">grass</span></div>
+            <div class="stat">Car: <span id="carText">Standard Sedan</span></div>
+            <div class="stat">Engine: <span id="engineText">Stock 4-Cylinder</span></div>
+            <div class="stat">Tires: <span id="tireText">Standard Tires</span></div>
+            <div class="stat">Exhaust: <span id="exhaustText">Stock Exhaust</span></div>
+            <div class="stat">Radiator: <span id="radiatorText">Stock Radiator</span></div>
+            <div class="stat">Battery unit: <span id="batteryPartText">Stock Battery</span></div>
+        </details>
+
         <div class="stat">
             Trunk:<br>
             Scrap: <span id="trunkText">0</span>/<span id="maxTrunkText">500</span><br>
@@ -60,10 +71,7 @@
         <div class="stat">Total Time: <span id="totalTime">00:00:00</span></div>
         <div class="stat">Total Distance: <span id="totalDistance">0.00</span> km</div>
         <div class="stat">Lights: <span id="lightsStatus">ON</span></div>
-        <div class="stat">
-            <h3>Artifacts Collected</h3>
-            <div id="artifactsList" style="max-height: 100px; overflow-y: auto;"></div>
-        </div>
+        <div class="stat">Towing: <span id="towingStatus">No</span></div>
 
         <div class="panel-section">
             <h3>Save Game</h3>
@@ -72,9 +80,21 @@
         </div>
     </div>
 
+    <div id="towHint" style="position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+         background: rgba(0,0,0,0.7); color: #4488aa; padding: 8px 16px; border-radius: 5px;
+         display: none; z-index: 1000; font-family: monospace; font-size: 14px;">
+        Press T to tow
+    </div>
+
     <div id="notifications" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
          background: rgba(0,0,0,0.7); color: white; padding: 10px 20px; border-radius: 5px; 
          display: none; z-index: 1000; font-family: monospace;">
+    </div>
+
+    <div id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+         background: #111; z-index: 3000; display: flex; align-items: center; justify-content: center;
+         font-family: monospace; color: #888; font-size: 16px;">
+        Loading...
     </div>
 
     <!-- Add Game Over overlay -->
@@ -89,7 +109,6 @@
                  background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
                 <p>Time Played: <span id="gameOverTime"></span></p>
                 <p>Distance Traveled: <span id="gameOverDistance"></span> km</p>
-                <p>Artifacts Collected: <span id="gameOverArtifacts"></span></p>
             </div>
             <button onclick="restartGame()" style="background: #ff0000; color: white; border: none; 
                     padding: 10px 20px; margin-top: 20px; cursor: pointer; border-radius: 5px;">
@@ -99,6 +118,13 @@
     </div>
 
     <script src="constants.js?1"></script>
+    <script src="world.js"></script>
+    <script src="engine.js"></script>
+    <script src="tires.js"></script>
+    <script src="cars.js"></script>
+    <script src="exhaust.js"></script>
+    <script src="radiator.js"></script>
+    <script src="battery.js"></script>
     <script src="particles.js"></script>
     <script src="audio.js"></script>
 
@@ -107,27 +133,18 @@
         document.getElementById('gameContainer').appendChild(canvas);
 
         const ctx = canvas.getContext('2d');
-        // Disable image smoothing for crisp pixel art
-        ctx.imageSmoothingEnabled = true;
-        ctx.mozImageSmoothingEnabled = true;
-        ctx.webkitImageSmoothingEnabled = true;
-        ctx.msImageSmoothingEnabled = true;
+        ctx.imageSmoothingEnabled = false;
+        ctx.mozImageSmoothingEnabled = false;
+        ctx.webkitImageSmoothingEnabled = false;
+        ctx.msImageSmoothingEnabled = false;
 
-        // Set canvas size to full window minus panel width
         function resizeCanvas() {
-            canvas.width = window.innerWidth - 240; // 200px panel + 40px padding
+            canvas.width = window.innerWidth - 240;
             canvas.height = window.innerHeight;
-            // Ensure smoothing remains disabled after resize
-            ctx.imageSmoothingEnabled = true;
-            ctx.mozImageSmoothingEnabled = true;
-            ctx.webkitImageSmoothingEnabled = true;
-            ctx.msImageSmoothingEnabled = true;
+            ctx.imageSmoothingEnabled = false;
         }
 
-        // Initial canvas size
         resizeCanvas();
-
-        // Handle window resize
         window.addEventListener('resize', resizeCanvas);
 
         // Initialize images object
@@ -165,13 +182,15 @@
                 isEngineRunning: false,
                 grip: 0.95,
                 exhaustParticles: [],
+                damageSmokeParticles: [],
                 handbrakeParticles: [],
                 lightsOn: true,
                 isHandbrakeOn: false,
                 turnStartTime: 0,
                 isTurning: false
             },
-            mapData: null,
+            world: { seed: 42 },
+            collectedTiles: new Set(),
             entities: new Map(),
             tireTrackHistory: [],
             keys: {},
@@ -185,47 +204,23 @@
             },
             stats: {
                 totalDistance: 0,
-                artifactsCollected: []
             },
             particles: {
-                fire: [],
                 water: []
             },
+            towing: {
+                active: false,
+                targetEntity: null,
+                towedCar: null,
+                ropeLength: 60,
+            },
         };
-
-        // Add map image to textures
-        TEXTURES.push({ type: 'map', src: 'map2.png' });
-
-        const ENTITY_TYPES = new Set(['scrap', 'barrel', 'circuit', 'artifact_heart', 'artifact_fuel', 'tree', 'rock']);
-
         function worldToTile(worldX, worldY) {
-            const md = gameState.mapData;
-            if (!md) return [0, 0];
-            const tileX = Math.round((worldX + md.worldWidth / 2) / md.tileSize);
-            const tileY = Math.round((worldY + md.worldHeight / 2) / md.tileSize);
-            return [tileX, tileY];
+            return [Math.round(worldX / TILE_SIZE), Math.round(worldY / TILE_SIZE)];
         }
 
         function getTerrainTypeAtTile(tileX, tileY) {
-            const md = gameState.mapData;
-            if (!md || tileX < 0 || tileX >= md.width || tileY < 0 || tileY >= md.height) {
-                return 'unknown';
-            }
-            const i = (tileY * md.width + tileX) * 4;
-            const r = md.pixelData[i];
-            const g = md.pixelData[i + 1];
-            const b = md.pixelData[i + 2];
-            const hex = '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
-            return MAP_COLORS[hex] || 'unknown';
-        }
-
-        function getTerrainColorAtTile(tileX, tileY) {
-            const md = gameState.mapData;
-            if (!md || tileX < 0 || tileX >= md.width || tileY < 0 || tileY >= md.height) {
-                return '#333333';
-            }
-            const i = (tileY * md.width + tileX) * 4;
-            return `rgb(${md.pixelData[i]}, ${md.pixelData[i + 1]}, ${md.pixelData[i + 2]})`;
+            return getWorldTerrainType(tileX, tileY);
         }
 
         function getTerrainAt(worldX, worldY) {
@@ -254,73 +249,66 @@
                 gameState.car.lightsOn = !gameState.car.lightsOn;
                 document.getElementById('lightsStatus').textContent = gameState.car.lightsOn ? 'ON' : 'OFF';
             }
+
+            if (e.key.toLowerCase() === 't') {
+                const car = gameState.car;
+                const tow = gameState.towing;
+
+                if (tow.active) {
+                    // Detach: update entity position to where the towed car currently is
+                    if (tow.targetEntity) {
+                        tow.targetEntity.x = tow.towedCar.x;
+                        tow.targetEntity.y = tow.towedCar.y;
+                    }
+                    tow.active = false;
+                    tow.targetEntity = null;
+                    tow.towedCar = null;
+                    showNotification('Released');
+                } else {
+                    // Try to attach: find nearby abandoned car
+                    const nearby = getNearbyEntities(car.x, car.y, 3);
+                    let best = null;
+                    let bestDist = Infinity;
+                    for (const ent of nearby) {
+                        if (ent.type !== 'abandoned_car' || !ent.active) continue;
+                        const dx = ent.x - car.x;
+                        const dy = ent.y - car.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 50 && dist < bestDist && Math.abs(car.speed) < 0.5) {
+                            // Check rear-facing: car backward direction dot product with direction to target
+                            const backX = -Math.sin(car.rotation);
+                            const backY = Math.cos(car.rotation);
+                            const toTargetX = dx / dist;
+                            const toTargetY = dy / dist;
+                            const dot = backX * toTargetX + backY * toTargetY;
+                            if (dot > 0.3) {
+                                best = ent;
+                                bestDist = dist;
+                            }
+                        }
+                    }
+                    if (best) {
+                        tow.active = true;
+                        tow.targetEntity = best;
+                        tow.towedCar = { x: best.x, y: best.y, rotation: car.rotation };
+                        showNotification('Towing!');
+                    }
+                }
+            }
         });
         window.addEventListener('keyup', (e) => gameState.keys[e.key] = false);
 
-        // Update terrain generation to use image
         function generateTerrain() {
-            const GAME_TILE_SIZE = 80;
+            initWorld(gameState.world.seed);
+            gameState.entities = new Map();
+            gameState.viewport.x = gameState.car.x - canvas.width / 2;
+            gameState.viewport.y = gameState.car.y - canvas.height / 2;
 
-            try {
-                const mapImage = images.map;
-                if (!mapImage || !mapImage.complete) return;
-
-                const MAP_WIDTH = mapImage.width;
-                const MAP_HEIGHT = mapImage.height;
-                const worldWidth = MAP_WIDTH * GAME_TILE_SIZE;
-                const worldHeight = MAP_HEIGHT * GAME_TILE_SIZE;
-
-                gameState.viewport.x = gameState.car.x - canvas.width / 2;
-                gameState.viewport.y = gameState.car.y - canvas.height / 2;
-
-                const mapCanvas = document.createElement('canvas');
-                const mapCtx = mapCanvas.getContext('2d', { willReadFrequently: true });
-                mapCanvas.width = MAP_WIDTH;
-                mapCanvas.height = MAP_HEIGHT;
-                mapCtx.drawImage(mapImage, 0, 0, MAP_WIDTH, MAP_HEIGHT);
-
-                const imageData = mapCtx.getImageData(0, 0, MAP_WIDTH, MAP_HEIGHT);
-
-                gameState.mapData = {
-                    pixelData: imageData.data,
-                    width: MAP_WIDTH,
-                    height: MAP_HEIGHT,
-                    tileSize: GAME_TILE_SIZE,
-                    worldWidth: worldWidth,
-                    worldHeight: worldHeight
-                };
-
-                gameState.entities = new Map();
-
-                for (let y = 0; y < MAP_HEIGHT; y++) {
-                    for (let x = 0; x < MAP_WIDTH; x++) {
-                        const terrainType = getTerrainTypeAtTile(x, y);
-
-                        if (ENTITY_TYPES.has(terrainType)) {
-                            const worldX = -worldWidth / 2 + x * GAME_TILE_SIZE;
-                            const worldY = -worldHeight / 2 + y * GAME_TILE_SIZE;
-
-                            let isCollected = false;
-                            if (terrainType === 'artifact_heart' || terrainType === 'artifact_fuel') {
-                                isCollected = gameState.stats.artifactsCollected.some(
-                                    a => a.type === terrainType
-                                );
-                            }
-
-                            gameState.entities.set(`${x},${y}`, {
-                                type: isCollected ? 'collected' : terrainType,
-                                x: worldX,
-                                y: worldY,
-                                tileX: x,
-                                tileY: y,
-                                size: GAME_TILE_SIZE,
-                                active: !isCollected
-                            });
-                        }
-                    }
+            const result = updateWorldChunks(gameState.car.x, gameState.car.y, gameState.collectedTiles);
+            for (const nc of result.newChunks) {
+                for (const ent of nc.entities) {
+                    gameState.entities.set(`${ent.tileX},${ent.tileY}`, ent);
                 }
-            } catch (error) {
-                return;
             }
         }
 
@@ -358,7 +346,8 @@
 
                 // Replenish battery from trunk
                 if (gameState.car.battery < gameState.car.maxBattery && gameState.car.trunkBattery > 0) {
-                    if (now - gameState.car.lastBatteryUse >= 10000) { // 10 seconds
+                    const batteryInterval = 10000 / (batterySystem?.current?.efficiency || 1);
+                    if (now - gameState.car.lastBatteryUse >= batteryInterval) {
                         gameState.car.trunkBattery -= 1;
                         gameState.car.battery += 1;
                         gameState.car.lastBatteryUse = now;
@@ -381,7 +370,7 @@
             if (Math.abs(gameState.car.speed) > 0.1) {
                 if (now - gameState.car.lastFuelUse >= 10000) { // 10 seconds
                     if (gameState.car.fuel > 0) {
-                        gameState.car.fuel -= 1;
+                        gameState.car.fuel -= engineSystem.current.fuelRate;
                     } else if (gameState.car.trunkFuel > 0) {
                         // Use fuel from trunk
                         gameState.car.trunkFuel -= 1;
@@ -415,7 +404,8 @@
 
             // Battery drain while driving
             if (Math.abs(gameState.car.speed) > 0.1) {
-                if (now - gameState.car.lastBatteryUse >= 10000) { // 10 seconds
+                const batteryDrainInterval = 10000 / (batterySystem?.current?.efficiency || 1);
+                if (now - gameState.car.lastBatteryUse >= batteryDrainInterval) {
                     if (gameState.car.battery > 0) {
                         gameState.car.battery -= 1;
                     } else if (gameState.car.trunkBattery > 0) {
@@ -438,18 +428,23 @@
             }
 
             // Handle controls with improved braking and reverse
-            if (gameState.keys['ArrowUp']) {
-                gameState.car.acceleration = 0.2;
-            } else if (gameState.keys['ArrowDown']) {
-                gameState.car.acceleration = -0.15; // Direct reverse control
+            if (engineSystem.pendingSwap || tireSystem.pendingSwap || carSystem.pendingSwap ||
+                exhaustSystem.pendingSwap || radiatorSystem.pendingSwap || batterySystem.pendingSwap) {
+                gameState.car.acceleration = 0;
+                gameState.car.speed *= 0.95;
+            } else if (gameState.keys['ArrowUp'] || gameState.keys['w'] || gameState.keys['W']) {
+                gameState.car.acceleration = 0.2 * engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
+            } else if (gameState.keys['ArrowDown'] || gameState.keys['s'] || gameState.keys['S']) {
+                gameState.car.acceleration = -0.15 * engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
             } else {
                 gameState.car.acceleration = 0;
             }
 
-            // Enhanced turning physics
-            const baseSteeringRate = 0.008;
+            // Turning physics scaled by vehicle handling
+            const vehicleMass = carSystem?.current?.mass || 1;
+            const baseSteeringRate = 0.008 * (carSystem?.current?.steering || 1);
             const speedFactor = Math.abs(gameState.car.speed);
-            const steeringInertia = 0.95; // Higher value = less inertia (0.85 = subtle inertia)
+            const steeringInertia = 1 - (0.05 / vehicleMass);
 
             // Calculate turn rate based on speed
             let turnRate = baseSteeringRate;
@@ -462,11 +457,9 @@
             }
 
             // Handle steering with improved physics and inertia
-            if (gameState.keys['ArrowLeft']) {
-                // Gradually increase steering to max turn rate
+            if (gameState.keys['ArrowLeft'] || gameState.keys['a'] || gameState.keys['A']) {
                 gameState.car.steering = Math.max(-turnRate, gameState.car.steering - (turnRate * 0.2));
-            } else if (gameState.keys['ArrowRight']) {
-                // Gradually increase steering to max turn rate
+            } else if (gameState.keys['ArrowRight'] || gameState.keys['d'] || gameState.keys['D']) {
                 gameState.car.steering = Math.min(turnRate, gameState.car.steering + (turnRate * 0.2));
             } else {
                 // Gradual steering return to center with inertia
@@ -476,7 +469,7 @@
             // Handle handbrake and drifting
             if (gameState.keys[' ']) {
                 gameState.car.isHandbrakeOn = true;
-                gameState.car.speed *= 0.90;
+                gameState.car.speed *= 1 - (0.10 / vehicleMass);
                 gameState.car.grip = 0.7;
                 // Enhanced handbrake turning
                 gameState.car.rotation += gameState.car.steering * gameState.car.speed * 1.5;
@@ -533,24 +526,34 @@
 
             // Apply terrain-specific speed modifiers
             let terrainSpeedMultiplier = 1;
-            if (carTerrainType !== 'unknown') {
-                switch (carTerrainType) {
-                    case 'mud':
-                    case 'snow':
-                        terrainSpeedMultiplier = 0.5;
-                        break;
-                    case 'water':
-                        terrainSpeedMultiplier = 0.8;
-                        break;
-                    case 'deepwater':
-                        terrainSpeedMultiplier = 0.6;
-                        break;
-                }
+            switch (carTerrainType) {
+                case 'mud':
+                case 'snow':
+                    terrainSpeedMultiplier = 0.5;
+                    break;
+                case 'water':
+                    terrainSpeedMultiplier = 0.8;
+                    break;
+                case 'deepwater':
+                    terrainSpeedMultiplier = 0.6;
+                    break;
+            }
+
+            // Tire grip reduces terrain penalty
+            if (terrainSpeedMultiplier < 1) {
+                terrainSpeedMultiplier = Math.max(0.1, 1 - (1 - terrainSpeedMultiplier) / tireSystem.current.grip);
             }
 
             // Apply physics with terrain effects
             gameState.car.speed += gameState.car.acceleration * terrainSpeedMultiplier;
-            gameState.car.speed *= 0.95; // Friction
+            gameState.car.speed *= 1 - (0.05 / vehicleMass);
+
+            if (gameState.towing.active) {
+                const speedCap = 3 * 0.8;
+                if (Math.abs(gameState.car.speed) > speedCap) {
+                    gameState.car.speed = Math.sign(gameState.car.speed) * speedCap;
+                }
+            }
 
             // Add tire tracks for appropriate terrain
             if (Math.abs(gameState.car.speed) > 0.1 && (
@@ -594,7 +597,7 @@
 
             if (carTerrainType === 'water') {
                 if (now - gameState.car.lastDamageTime > 1000) {
-                    gameState.car.hp -= 1;
+                    gameState.car.hp -= Math.ceil(1 / ((carSystem?.current?.armor || 1) * (radiatorSystem?.current?.durability || 1)));
                     gameState.car.lastDamageTime = now;
                 }
                 gameState.car.speed *= 0.8;
@@ -604,7 +607,7 @@
                 }
             } else if (carTerrainType === 'deepwater') {
                 if (now - gameState.car.lastDamageTime > 1000) {
-                    gameState.car.hp -= 10;
+                    gameState.car.hp -= Math.ceil(10 / ((carSystem?.current?.armor || 1) * (radiatorSystem?.current?.durability || 1)));
                     gameState.car.lastDamageTime = now;
                 }
                 gameState.car.speed *= 0.6;
@@ -618,7 +621,7 @@
             const nearbyEntities = getNearbyEntities(gameState.car.x, gameState.car.y, 1);
 
             for (const point of nearbyEntities) {
-                if ((point.type === 'tree' || point.type === 'rock') && point.active) {
+                if ((point.type === 'tree_1' || point.type === 'tree_2' || point.type === 'rock') && point.active) {
                     const dx = point.x - gameState.car.x;
                     const dy = point.y - gameState.car.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -627,7 +630,7 @@
                         // Apply damage if moving fast enough
                         if (Math.abs(gameState.car.speed) > 0.5 &&
                             Date.now() - gameState.car.lastDamageTime > 1000) {
-                            gameState.car.hp -= 10;
+                            gameState.car.hp -= Math.ceil(10 / ((carSystem?.current?.armor || 1) * (radiatorSystem?.current?.durability || 1)));
                             gameState.car.lastDamageTime = Date.now();
                             audioManager.playSound('impact');
                         }
@@ -661,6 +664,7 @@
             document.getElementById('posX').textContent = Math.round(gameState.car.x);
             document.getElementById('posY').textContent = Math.round(gameState.car.y);
             document.getElementById('terrainText').textContent = carTerrainType;
+            document.getElementById('towingStatus').textContent = gameState.towing.active ? 'Yes' : 'No';
             document.getElementById('trunkText').textContent = gameState.car.trunk;
             document.getElementById('maxTrunkText').textContent = gameState.car.maxTrunk;
             document.getElementById('trunkFuelText').textContent = gameState.car.trunkFuel;
@@ -685,26 +689,7 @@
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance >= point.size / 2) continue;
 
-                if (point.type === 'artifact_heart') {
-                    gameState.car.hp = 100;
-                    gameState.car.trunk = Math.min(gameState.car.trunk + 250, gameState.car.maxTrunk);
-                    gameState.stats.artifactsCollected.push({
-                        type: 'artifact_heart', name: 'The Heart', collectedAt: Date.now()
-                    });
-                    showNotification('The Heart collected: Full HP + 250 Scrap!');
-                    saveGame();
-                    point.type = 'collected';
-                    point.active = false;
-                } else if (point.type === 'artifact_fuel') {
-                    gameState.car.trunkFuel = Math.min(gameState.car.trunkFuel + 250, gameState.car.maxTrunkFuel);
-                    gameState.stats.artifactsCollected.push({
-                        type: 'artifact_fuel', name: 'The Fuel Crystal', collectedAt: Date.now()
-                    });
-                    showNotification('The Fuel Crystal collected: +250 Fuel to trunk!');
-                    saveGame();
-                    point.type = 'collected';
-                    point.active = false;
-                } else if (point.type === 'scrap') {
+                if (point.type === 'scrap') {
                     const hpNeeded = 100 - gameState.car.hp;
                     if (hpNeeded > 0) {
                         gameState.car.hp += 10;
@@ -752,7 +737,89 @@
                         showNotification('Circuits stored in trunk: +10');
                     }
                     point.active = false;
+                } else if (point.type === 'engine_block') {
+                    if (engineSystem.canInteract()) {
+                        const foundEngine = engineSystem.getEngineForTile(point.tileX, point.tileY);
+                        engineSystem.showSwapUI(foundEngine, point);
+                    }
+                } else if (point.type === 'tire') {
+                    if (tireSystem.canInteract()) {
+                        const foundTire = tireSystem.getTireForTile(point.tileX, point.tileY);
+                        tireSystem.showSwapUI(foundTire, point);
+                    }
+                } else if (point.type === 'vehicle') {
+                    if (carSystem.canInteract()) {
+                        const foundCar = carSystem.getCarForTile(point.tileX, point.tileY);
+                        carSystem.showSwapUI(foundCar, point);
+                    }
+                } else if (point.type === 'exhaust') {
+                    if (exhaustSystem.canInteract()) {
+                        exhaustSystem.showSwapUI(exhaustSystem.getExhaustForTile(point.tileX, point.tileY), point);
+                    }
+                } else if (point.type === 'radiator') {
+                    if (radiatorSystem.canInteract()) {
+                        radiatorSystem.showSwapUI(radiatorSystem.getRadiatorForTile(point.tileX, point.tileY), point);
+                    }
+                } else if (point.type === 'battery') {
+                    if (batterySystem.canInteract()) {
+                        batterySystem.showSwapUI(batterySystem.getBatteryForTile(point.tileX, point.tileY), point);
+                    }
                 }
+
+                if (!point.active) {
+                    gameState.collectedTiles.add(`${point.tileX},${point.tileY}`);
+                }
+            }
+
+            // Rope / towing physics
+            if (gameState.towing.active && gameState.towing.towedCar) {
+                const car = gameState.car;
+                const tc = gameState.towing.towedCar;
+                const ropeLen = gameState.towing.ropeLength;
+
+                // Rear attach point of player car
+                const rearX = car.x - Math.sin(car.rotation) * (car.length / 2);
+                const rearY = car.y + Math.cos(car.rotation) * (car.length / 2);
+
+                const dx = tc.x - rearX;
+                const dy = tc.y - rearY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > ropeLen) {
+                    // Pull towed car so distance equals ropeLength
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+                    tc.x = rearX + nx * ropeLen;
+                    tc.y = rearY + ny * ropeLen;
+                }
+
+                // Damping: nudge towed car slightly toward the rear each frame
+                const dampFactor = 0.02;
+                tc.x += (rearX - tc.x) * dampFactor;
+                tc.y += (rearY - tc.y) * dampFactor;
+
+                // Rotate towed car to face player car
+                tc.rotation = Math.atan2(rearX - tc.x, -(rearY - tc.y));
+            }
+
+            // "Press T to tow" proximity hint
+            if (!gameState.towing.active) {
+                const nearby = getNearbyEntities(gameState.car.x, gameState.car.y, 3);
+                let canTow = false;
+                for (const ent of nearby) {
+                    if (ent.type !== 'abandoned_car' || !ent.active) continue;
+                    const dx = ent.x - gameState.car.x;
+                    const dy = ent.y - gameState.car.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 50) { canTow = true; break; }
+                }
+                if (canTow) {
+                    document.getElementById('towHint').style.display = 'block';
+                } else {
+                    document.getElementById('towHint').style.display = 'none';
+                }
+            } else {
+                document.getElementById('towHint').style.display = 'none';
             }
 
             // Update time of day text
@@ -782,43 +849,38 @@
             const width = gameState.car.width;
             const length = gameState.car.length;
 
-            if (images.car?.complete) {
-                // Draw car sprite
-                ctx.drawImage(
-                    images.car,
-                    -width / 2,  // Center the image
-                    -length / 2,
-                    width,      // Use exact width
-                    length      // Use exact length
-                );
+            const spriteKey = carSystem?.current?.sprite;
+
+            if (spriteKey && images[spriteKey]?.complete) {
+                ctx.drawImage(images[spriteKey], -width / 2, -length / 2, width, length);
             } else {
-                // Fallback to geometric shape if image not loaded
-                // Car dimensions
+                const bodyColor = carSystem?.current?.color || '#ff0000';
                 const roofWidth = width * 0.7;
                 const roofLength = length * 0.5;
 
-                // Draw car body (main shape)
                 ctx.beginPath();
-                ctx.moveTo(-width / 2, length / 2);  // Back left
-                ctx.lineTo(width / 2, length / 2);   // Back right
-                ctx.lineTo(width / 2, -length / 2);  // Front right
-                ctx.lineTo(-width / 2, -length / 2); // Front left
+                ctx.moveTo(-width / 2, length / 2);
+                ctx.lineTo(width / 2, length / 2);
+                ctx.lineTo(width / 2, -length / 2);
+                ctx.lineTo(-width / 2, -length / 2);
                 ctx.closePath();
-                ctx.fillStyle = '#ff0000';  // Main car color
+                ctx.fillStyle = bodyColor;
                 ctx.fill();
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 1;
                 ctx.stroke();
 
-                // Draw roof
                 ctx.beginPath();
                 ctx.moveTo(-roofWidth / 2, length / 4);
                 ctx.lineTo(roofWidth / 2, length / 4);
                 ctx.lineTo(roofWidth / 2, -length / 4);
                 ctx.lineTo(-roofWidth / 2, -length / 4);
                 ctx.closePath();
-                ctx.fillStyle = '#cc0000';
+                ctx.fillStyle = bodyColor;
                 ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                ctx.fill();
+                ctx.strokeStyle = '#000';
                 ctx.stroke();
 
                 // Draw windows
@@ -831,6 +893,143 @@
                 ctx.fillRect(-width / 2, length / 2 - 4, width, 4);
             }
 
+            ctx.restore();
+        }
+
+        function drawEntities() {
+            const vp = gameState.viewport;
+            const margin = 40;
+
+            for (const [, ent] of gameState.entities) {
+                if (!ent.active) continue;
+                if (ent.type === 'abandoned_car') continue;
+
+                const sx = ent.x - vp.x;
+                const sy = ent.y - vp.y;
+                if (sx < -margin || sx > canvas.width + margin || sy < -margin || sy > canvas.height + margin) continue;
+
+                const half = ent.size * 0.5;
+
+                if (images[ent.type]?.complete) {
+                    ctx.drawImage(images[ent.type], sx - half, sy - half, half * 2, half * 2);
+                } else {
+                    const color = ENTITY_FALLBACK_COLORS[ent.type] || '#888';
+                    ctx.fillStyle = color;
+
+                    if (ent.type === 'rock' || ent.type === 'tree_1' || ent.type === 'tree_2') {
+                        ctx.fillRect(sx - half * 0.4, sy - half * 0.4, half * 0.8, half * 0.8);
+                    } else if (ent.type === 'barrel') {
+                        ctx.fillRect(sx - half * 0.5, sy - half * 0.6, half, half * 1.2);
+                        ctx.strokeStyle = '#aa6622';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(sx - half * 0.5, sy - half * 0.6, half, half * 1.2);
+                    } else if (ent.type === 'engine_block') {
+                        ctx.fillRect(sx - half * 0.5, sy - half * 0.4, half, half * 0.8);
+                        ctx.fillStyle = '#556677';
+                        ctx.fillRect(sx - half * 0.2, sy - half * 0.25, half * 0.4, half * 0.5);
+                    } else if (ent.type === 'vehicle') {
+                        ctx.fillRect(sx - half * 0.3, sy - half * 0.5, half * 0.6, half);
+                        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                        ctx.fillRect(sx - half * 0.2, sy - half * 0.2, half * 0.4, half * 0.3);
+                    } else {
+                        ctx.fillRect(sx - half * 0.4, sy - half * 0.4, half * 0.8, half * 0.8);
+                    }
+                }
+            }
+        }
+
+        function drawAbandonedCars() {
+            const vp = gameState.viewport;
+            const margin = 100;
+            const towedKey = gameState.towing.targetEntity
+                ? `${gameState.towing.targetEntity.tileX},${gameState.towing.targetEntity.tileY}`
+                : null;
+
+            for (const [key, ent] of gameState.entities) {
+                if (ent.type !== 'abandoned_car' || !ent.active) continue;
+                if (towedKey && key === towedKey) continue; // drawn separately when towed
+
+                const sx = ent.x - vp.x;
+                const sy = ent.y - vp.y;
+                if (sx < -margin || sx > canvas.width + margin || sy < -margin || sy > canvas.height + margin) continue;
+
+                ctx.save();
+                ctx.translate(sx, sy);
+
+                const w = 20;
+                const l = 34;
+                // Body
+                ctx.fillStyle = '#4488aa';
+                ctx.fillRect(-w / 2, -l / 2, w, l);
+                ctx.strokeStyle = '#336677';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-w / 2, -l / 2, w, l);
+                // Roof
+                ctx.fillStyle = '#3a7799';
+                ctx.fillRect(-w * 0.35, -l * 0.25, w * 0.7, l * 0.5);
+                // Rust spots
+                ctx.fillStyle = 'rgba(139, 69, 19, 0.4)';
+                ctx.fillRect(-w * 0.3, -l * 0.3, 6, 4);
+                ctx.fillRect(w * 0.1, l * 0.15, 5, 3);
+
+                ctx.restore();
+            }
+        }
+
+        function drawTowedCar() {
+            const tow = gameState.towing;
+            if (!tow.active || !tow.towedCar) return;
+
+            const tc = tow.towedCar;
+            const vp = gameState.viewport;
+            const sx = tc.x - vp.x;
+            const sy = tc.y - vp.y;
+
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(tc.rotation);
+
+            const w = 20;
+            const l = 34;
+            ctx.fillStyle = '#4488aa';
+            ctx.fillRect(-w / 2, -l / 2, w, l);
+            ctx.strokeStyle = '#336677';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-w / 2, -l / 2, w, l);
+            ctx.fillStyle = '#3a7799';
+            ctx.fillRect(-w * 0.35, -l * 0.25, w * 0.7, l * 0.5);
+            ctx.fillStyle = 'rgba(139, 69, 19, 0.4)';
+            ctx.fillRect(-w * 0.3, -l * 0.3, 6, 4);
+            ctx.fillRect(w * 0.1, l * 0.15, 5, 3);
+
+            ctx.restore();
+        }
+
+        function drawTowRope() {
+            const tow = gameState.towing;
+            if (!tow.active || !tow.towedCar) return;
+
+            const car = gameState.car;
+            const tc = tow.towedCar;
+            const vp = gameState.viewport;
+
+            // Rear of player car
+            const rearX = car.x - Math.sin(car.rotation) * (car.length / 2);
+            const rearY = car.y + Math.cos(car.rotation) * (car.length / 2);
+
+            // Front of towed car
+            const frontX = tc.x + Math.sin(tc.rotation) * 17;
+            const frontY = tc.y - Math.cos(tc.rotation) * 17;
+
+            ctx.save();
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(rearX - vp.x, rearY - vp.y);
+            ctx.lineTo(frontX - vp.x, frontY - vp.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
             ctx.restore();
         }
 
@@ -894,35 +1093,6 @@
                 ctx.lineTo(width / 4, -length / 2);
                 ctx.fillStyle = gradient;
                 ctx.fill();
-
-                // Inner bright beam
-                /*
-                ctx.beginPath();
-                ctx.moveTo(-width / 4, -length / 2);
-                ctx.lineTo(-width / 2 - 30, -length / 2 - 80);
-                ctx.lineTo(width / 2 + 30, -length / 2 - 80);
-                ctx.lineTo(width / 4, -length / 2);
-                ctx.fillStyle = `rgba(255, 255, 220, ${0.4 * headlightIntensity})`;
-                ctx.fill();
-                */
-
-                // Center bright spot with lighter blend mode for extra intensity
-                /*
-                ctx.globalCompositeOperation = 'lighter';
-                const centerGradient = ctx.createRadialGradient(
-                    0, -length / 2 - 40,  // Center of bright spot
-                    0,                    // Start radius
-                    0, -length / 2 - 40,  // Same center point
-                    30                    // End radius
-                );
-                centerGradient.addColorStop(0, `rgba(255, 255, 220, ${0.6 * headlightIntensity})`);
-                centerGradient.addColorStop(1, `rgba(255, 255, 220, 0)`);
-
-                ctx.beginPath();
-                ctx.arc(0, -length / 2 - 40, 30, 0, Math.PI * 2);
-                ctx.fillStyle = centerGradient;
-                ctx.fill();
-                */
 
                 // Headlight dots with enhanced glow
                 // Outer glow
@@ -1018,63 +1188,59 @@
         const MINIMAP_ZOOM = 3;
         const minimapCanvas = document.getElementById('minimap');
         const minimapCtx = minimapCanvas.getContext('2d');
-        let minimapImageReady = false;
-        let minimapImageData = null;
 
         minimapCanvas.width = MINIMAP_SIZE;
         minimapCanvas.height = MINIMAP_SIZE;
 
-        function initMinimap() {
-            const mapImage = images.map;
-            if (!mapImage || !mapImage.complete) return;
-
-            const tmpCanvas = document.createElement('canvas');
-            tmpCanvas.width = mapImage.width;
-            tmpCanvas.height = mapImage.height;
-            const tmpCtx = tmpCanvas.getContext('2d');
-            tmpCtx.drawImage(mapImage, 0, 0);
-            minimapImageData = tmpCanvas;
-            minimapImageReady = true;
-        }
-
         function drawMinimap() {
-            if (!minimapImageReady) {
-                initMinimap();
-                if (!minimapImageReady) return;
-            }
-
-            const md = gameState.mapData;
-            if (!md) return;
-
-            const playerTX = (gameState.car.x + md.worldWidth / 2) / md.tileSize;
-            const playerTY = (gameState.car.y + md.worldHeight / 2) / md.tileSize;
-
-            const viewTiles = MINIMAP_SIZE / MINIMAP_ZOOM;
-            const srcX = playerTX - viewTiles / 2;
-            const srcY = playerTY - viewTiles / 2;
+            const playerTX = Math.round(gameState.car.x / TILE_SIZE);
+            const playerTY = Math.round(gameState.car.y / TILE_SIZE);
+            const viewTiles = Math.floor(MINIMAP_SIZE / MINIMAP_ZOOM);
+            const half = Math.floor(viewTiles / 2);
 
             minimapCtx.fillStyle = '#333';
             minimapCtx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
 
-            minimapCtx.drawImage(
-                minimapImageData,
-                srcX, srcY, viewTiles, viewTiles,
-                0, 0, MINIMAP_SIZE, MINIMAP_SIZE
-            );
+            for (let dy = -half; dy <= half; dy++) {
+                for (let dx = -half; dx <= half; dx++) {
+                    const tt = getWorldTerrainType(playerTX + dx, playerTY + dy);
+                    minimapCtx.fillStyle = TERRAIN_COLORS[tt] || '#333';
+                    minimapCtx.fillRect((dx + half) * MINIMAP_ZOOM, (dy + half) * MINIMAP_ZOOM, MINIMAP_ZOOM, MINIMAP_ZOOM);
+                }
+            }
 
-            const vpLeft = ((gameState.viewport.x + md.worldWidth / 2) / md.tileSize - srcX) * MINIMAP_ZOOM;
-            const vpTop = ((gameState.viewport.y + md.worldHeight / 2) / md.tileSize - srcY) * MINIMAP_ZOOM;
-            const vpW = (canvas.width / md.tileSize) * MINIMAP_ZOOM;
-            const vpH = (canvas.height / md.tileSize) * MINIMAP_ZOOM;
-
+            // Viewport rectangle
+            const vpDx = (gameState.viewport.x / TILE_SIZE - playerTX + half) * MINIMAP_ZOOM;
+            const vpDy = (gameState.viewport.y / TILE_SIZE - playerTY + half) * MINIMAP_ZOOM;
+            const vpW = (canvas.width / TILE_SIZE) * MINIMAP_ZOOM;
+            const vpH = (canvas.height / TILE_SIZE) * MINIMAP_ZOOM;
             minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             minimapCtx.lineWidth = 1;
-            minimapCtx.strokeRect(vpLeft, vpTop, vpW, vpH);
+            minimapCtx.strokeRect(vpDx, vpDy, vpW, vpH);
 
+            // Abandoned cars and entities
+            for (const [, ent] of gameState.entities) {
+                if (ent.type !== 'abandoned_car' || !ent.active) continue;
+                const ex = (Math.round(ent.x / TILE_SIZE) - playerTX + half) * MINIMAP_ZOOM;
+                const ey = (Math.round(ent.y / TILE_SIZE) - playerTY + half) * MINIMAP_ZOOM;
+                if (ex < 0 || ex > MINIMAP_SIZE || ey < 0 || ey > MINIMAP_SIZE) continue;
+                minimapCtx.fillStyle = '#4488aa';
+                minimapCtx.fillRect(ex - 2, ey - 2, 4, 4);
+            }
+
+            // Towed car
+            if (gameState.towing.active && gameState.towing.towedCar) {
+                const tc = gameState.towing.towedCar;
+                const tx = (Math.round(tc.x / TILE_SIZE) - playerTX + half) * MINIMAP_ZOOM;
+                const ty = (Math.round(tc.y / TILE_SIZE) - playerTY + half) * MINIMAP_ZOOM;
+                minimapCtx.fillStyle = '#66aacc';
+                minimapCtx.fillRect(tx - 2, ty - 2, 4, 4);
+            }
+
+            // Player indicator
             minimapCtx.save();
-            minimapCtx.translate(MINIMAP_SIZE / 2, MINIMAP_SIZE / 2);
+            minimapCtx.translate(half * MINIMAP_ZOOM, half * MINIMAP_ZOOM);
             minimapCtx.rotate(gameState.car.rotation);
-
             minimapCtx.beginPath();
             minimapCtx.moveTo(0, -6);
             minimapCtx.lineTo(-4, 5);
@@ -1085,7 +1251,6 @@
             minimapCtx.strokeStyle = '#000';
             minimapCtx.lineWidth = 1;
             minimapCtx.stroke();
-
             minimapCtx.restore();
         }
 
@@ -1111,6 +1276,19 @@
             }
 
             const darkness = Math.max(0.1, Math.min(0.7, 1 - daylight));
+
+            // Update world chunks
+            const chunkResult = updateWorldChunks(gameState.car.x, gameState.car.y, gameState.collectedTiles);
+            for (const nc of chunkResult.newChunks) {
+                for (const ent of nc.entities) {
+                    gameState.entities.set(`${ent.tileX},${ent.tileY}`, ent);
+                }
+            }
+            for (const rc of chunkResult.removedChunks) {
+                for (const ent of rc.entities) {
+                    gameState.entities.delete(`${ent.tileX},${ent.tileY}`);
+                }
+            }
 
             // Draw terrain
             drawTerrain();
@@ -1141,25 +1319,27 @@
             });
 
             // Update particles
-            updateFireParticles(gameState);
             updateHandbrakeParticles(gameState);
             updateExhaustParticles(gameState);
+            updateDamageSmokeParticles(gameState);
             updateWaterSplashParticles(gameState);
 
             // Draw particles in correct order
-            drawWaterSplashParticles(ctx, gameState);  // Draw water first
+            drawWaterSplashParticles(ctx, gameState);
             drawHandbrakeParticles(ctx, gameState);
             drawExhaustParticles(ctx, gameState);
+            drawDamageSmokeParticles(ctx, gameState);
 
-            // Draw car
+            drawEntities();
+            drawAbandonedCars();
+            drawTowedCar();
+            drawTowRope();
             drawCar();
 
             // Apply darkness overlay
             ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw fire particles and lights after darkness
-            drawFireParticles(ctx, gameState);
             drawCarLights();
 
             // Update car physics
@@ -1182,9 +1362,6 @@
             if (distanceElement) {
                 distanceElement.textContent = gameState.stats.totalDistance.toFixed(2);
             }
-
-            // Update artifacts display
-            updateArtifactsDisplay();
 
             // Draw minimap
             drawMinimap();
@@ -1216,51 +1393,66 @@
             ctx.fillStyle = '#333333';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            const md = gameState.mapData;
-            if (!md) return;
-
             const waterAnimTime = Date.now() / 1000;
-            const ts = md.tileSize;
-            const halfWorld = { x: md.worldWidth / 2, y: md.worldHeight / 2 };
+            const ts = TILE_SIZE;
 
-            const startCol = Math.max(0, Math.floor((gameState.viewport.x + halfWorld.x) / ts) - 1);
-            const endCol = Math.min(md.width - 1, Math.ceil((gameState.viewport.x + canvas.width + halfWorld.x) / ts) + 1);
-            const startRow = Math.max(0, Math.floor((gameState.viewport.y + halfWorld.y) / ts) - 1);
-            const endRow = Math.min(md.height - 1, Math.ceil((gameState.viewport.y + canvas.height + halfWorld.y) / ts) + 1);
+            const startCol = Math.floor(gameState.viewport.x / ts) - 1;
+            const endCol = Math.ceil((gameState.viewport.x + canvas.width) / ts) + 1;
+            const startRow = Math.floor(gameState.viewport.y / ts) - 1;
+            const endRow = Math.ceil((gameState.viewport.y + canvas.height) / ts) + 1;
 
             for (let ty = startRow; ty <= endRow; ty++) {
                 for (let tx = startCol; tx <= endCol; tx++) {
-                    const worldX = -halfWorld.x + tx * ts;
-                    const worldY = -halfWorld.y + ty * ts;
+                    const worldX = tx * ts;
+                    const worldY = ty * ts;
                     const screenX = worldX - gameState.viewport.x;
                     const screenY = worldY - gameState.viewport.y;
 
                     const entity = gameState.entities.get(`${tx},${ty}`);
+                    let terrainType = getTerrainTypeAtTile(tx, ty);
+                    let drawnAsImage = false;
 
                     if (entity && !entity.active) {
                         ctx.fillStyle = TERRAIN_COLORS.collected;
+                    } else if (terrainType === 'water' || terrainType === 'deepwater') {
+                        const waveX = Math.sin(worldX / 80 + waterAnimTime * 2) * 0.8;
+                        const waveY = Math.cos(worldY / 80 + waterAnimTime * 2) * 0.8;
+                        const wave = (waveX + waveY) * 0.7;
+                        const ripple = Math.sin(
+                            Math.sqrt(Math.pow(worldX / 60, 2) + Math.pow(worldY / 60, 2)) - waterAnimTime * 3
+                        ) * 0.6;
+                        const combinedEffect = wave + ripple;
+                        const hex = TERRAIN_COLORS[terrainType] || '#2f3f63';
+                        const r = parseInt(hex.slice(1, 3), 16);
+                        const g = parseInt(hex.slice(3, 5), 16);
+                        const b = parseInt(hex.slice(5, 7), 16);
+                        const v = Math.round(Math.min(35, combinedEffect * 25));
+                        ctx.fillStyle = `rgb(${Math.min(255, r + v)},${Math.min(255, g + v)},${Math.min(255, b + v)})`;
                     } else {
-                        const terrainType = getTerrainTypeAtTile(tx, ty);
+                        if (images[terrainType]?.complete) {
+                            ctx.drawImage(images[terrainType], screenX - ts / 2, screenY - ts / 2, ts, ts);
+                            drawnAsImage = true;
+                        }
+                    }
+                    if (!drawnAsImage) {
+                        if (terrainType !== 'water' && terrainType !== 'deepwater') {
+                            ctx.fillStyle = TERRAIN_COLORS[terrainType] || '#333';
+                        }
+                        ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
+                    }
 
-                        if (terrainType === 'water' || terrainType === 'deepwater') {
-                            const waveX = Math.sin(worldX / 80 + waterAnimTime * 2) * 0.8;
-                            const waveY = Math.cos(worldY / 80 + waterAnimTime * 2) * 0.8;
-                            const wave = (waveX + waveY) * 0.7;
-                            const ripple = Math.sin(
-                                Math.sqrt(Math.pow(worldX / 60, 2) + Math.pow(worldY / 60, 2)) - waterAnimTime * 3
-                            ) * 0.6;
-                            const combinedEffect = wave + ripple;
-
-                            if (terrainType === 'water') {
-                                ctx.fillStyle = `rgb(40, 40, ${Math.min(255, 255 + combinedEffect * 60)})`;
-                            } else {
-                                ctx.fillStyle = `rgb(0, 0, ${Math.min(180, 102 + combinedEffect * 50)})`;
+                    if (terrainType === 'grass') {
+                        const h = (Math.abs((tx * 73 + ty * 137) ^ (gameState.world.seed * 31)) % 1000) / 1000;
+                        if (h > 0.94) {
+                            const overlay = h > 0.97 ? 'grass_2' : 'grass_1';
+                            if (images[overlay]?.complete) {
+                                ctx.drawImage(images[overlay], screenX - ts / 2, screenY - ts / 2, ts, ts);
                             }
-                        } else {
-                            ctx.fillStyle = TERRAIN_COLORS[terrainType] || getTerrainColorAtTile(tx, ty);
                         }
                     }
 
+                    const noise = ((tx * 73 + ty * 137) & 255) / 255;
+                    ctx.fillStyle = `rgba(0,0,0,${noise * 0.08})`;
                     ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
                 }
             }
@@ -1275,8 +1467,7 @@
                 },
                 stats: {
                     totalTime: gameState.time.totalSeconds,
-                    totalDistance: gameState.stats.totalDistance,
-                    artifactsCollected: gameState.stats.artifactsCollected
+                    totalDistance: gameState.stats.totalDistance
                 },
                 time: {
                     current: gameState.time.current
@@ -1288,12 +1479,21 @@
                     trunk: gameState.car.trunk,
                     trunkFuel: gameState.car.trunkFuel,
                     trunkBattery: gameState.car.trunkBattery
-                }
+                },
+                world: {
+                    seed: worldSeed,
+                    collectedTiles: Array.from(gameState.collectedTiles)
+                },
+                engine: engineSystem.getSaveData(),
+                tires: tireSystem.getSaveData(),
+                car: carSystem.getSaveData(),
+                exhaust: exhaustSystem.getSaveData(),
+                radiator: radiatorSystem.getSaveData(),
+                battery: batterySystem.getSaveData()
             };
             localStorage.setItem('carGameSave', JSON.stringify(saveData));
         }
 
-        // Add load function (after saveGame)
         function loadGame() {
             const saveData = JSON.parse(localStorage.getItem('carGameSave'));
             if (saveData) {
@@ -1302,14 +1502,11 @@
                 gameState.car.rotation = saveData.position.rotation;
                 gameState.time.totalSeconds = saveData.stats.totalTime || 0;
                 gameState.stats.totalDistance = saveData.stats.totalDistance || 0;
-                gameState.stats.artifactsCollected = saveData.stats.artifactsCollected || [];
 
-                // Load time of day
                 if (saveData.time) {
                     gameState.time.current = saveData.time.current;
                 }
 
-                // Load car stats and trunk values
                 if (saveData.car) {
                     gameState.car.hp = saveData.car.hp ?? gameState.car.hp;
                     gameState.car.fuel = saveData.car.fuel ?? gameState.car.fuel;
@@ -1319,9 +1516,33 @@
                     gameState.car.trunkBattery = saveData.car.trunkBattery ?? gameState.car.trunkBattery;
                 }
 
-                // After loading artifacts, regenerate terrain to update artifact states
-                generateTerrain();
+                if (saveData.world) {
+                    gameState.world.seed = saveData.world.seed;
+                    gameState.collectedTiles = new Set(saveData.world.collectedTiles || []);
+                }
+
+                if (saveData.engine) {
+                    engineSystem.loadSaveData(saveData.engine);
+                }
+                if (saveData.tires) {
+                    tireSystem.loadSaveData(saveData.tires);
+                }
+                if (saveData.car) {
+                    carSystem.loadSaveData(saveData.car);
+                }
+                if (saveData.exhaust) {
+                    exhaustSystem.loadSaveData(saveData.exhaust);
+                }
+                if (saveData.radiator) {
+                    radiatorSystem.loadSaveData(saveData.radiator);
+                }
+                if (saveData.battery) {
+                    batterySystem.loadSaveData(saveData.battery);
+                }
+
+                return true;
             }
+            return false;
         }
 
         // Add auto-save before page unload
@@ -1335,12 +1556,19 @@
                 loadImages(),
                 audioManager.loadSounds()
             ]);
-            generateTerrain();
+            engineSystem.init();
+            tireSystem.init();
+            carSystem.init();
+            exhaustSystem.init();
+            radiatorSystem.init();
+            batterySystem.init();
             loadGame();
+            generateTerrain();
 
-            // Make sure viewport is centered on car
             gameState.viewport.x = gameState.car.x - canvas.width / 2;
             gameState.viewport.y = gameState.car.y - canvas.height / 2;
+
+            document.getElementById('loadingOverlay').style.display = 'none';
         };
 
         // Update loadImages function
@@ -1351,9 +1579,7 @@
 
                 function checkAllLoaded() {
                     loadedCount++;
-                    if (loadedCount === totalImages) {
-                        resolve();
-                    }
+                    if (loadedCount === totalImages) resolve();
                 }
 
                 TEXTURES.forEach(texture => {
@@ -1375,31 +1601,6 @@
             setTimeout(() => {
                 notif.style.display = 'none';
             }, duration);
-        }
-
-        // Add this function after showNotification
-        function updateArtifactsDisplay() {
-            const artifactsList = document.getElementById('artifactsList');
-            if (!artifactsList) return;
-
-            artifactsList.innerHTML = '';
-            gameState.stats.artifactsCollected.forEach(artifact => {
-                const artifactDiv = document.createElement('div');
-                artifactDiv.style.marginBottom = '5px';
-                artifactDiv.style.padding = '5px';
-                artifactDiv.style.background = 'rgba(255, 255, 255, 0.1)';
-                artifactDiv.style.borderRadius = '3px';
-
-                const date = new Date(artifact.collectedAt);
-                const timeStr = date.toLocaleTimeString();
-                const dateStr = date.toLocaleDateString();
-
-                artifactDiv.innerHTML = `
-                    <strong>${artifact.name}</strong><br>
-                    <small>Collected: ${dateStr} ${timeStr}</small>
-                `;
-                artifactsList.appendChild(artifactDiv);
-            });
         }
 
         function eraseSave() {
@@ -1434,8 +1635,6 @@
                 `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             document.getElementById('gameOverDistance').textContent =
                 gameState.stats.totalDistance.toFixed(2);
-            document.getElementById('gameOverArtifacts').textContent =
-                gameState.stats.artifactsCollected.length;
 
             // Show overlay
             document.getElementById('gameOverOverlay').style.display = 'block';
@@ -1445,7 +1644,6 @@
         }
 
         function restartGame() {
-            // Reset car state
             gameState.car.x = 0;
             gameState.car.y = 0;
             gameState.car.rotation = 0;
@@ -1459,21 +1657,33 @@
             gameState.car.trunkBattery = 0;
             gameState.car.isEngineRunning = false;
             gameState.car.lightsOn = true;
+            gameState.car.exhaustParticles = [];
+            gameState.car.damageSmokeParticles = [];
+            gameState.car.handbrakeParticles = [];
 
-            // Reset game stats
             gameState.time.totalSeconds = 0;
             gameState.stats.totalDistance = 0;
-            gameState.stats.artifactsCollected = [];
-            gameState.time.current = 0.5; // Start at noon
+            gameState.time.current = 0.5;
 
-            // Reset viewport
+            gameState.towing.active = false;
+            gameState.towing.targetEntity = null;
+            gameState.towing.towedCar = null;
+
+            gameState.world.seed = Math.floor(Math.random() * 100000);
+            gameState.collectedTiles = new Set();
+
             gameState.viewport.x = gameState.car.x - canvas.width / 2;
             gameState.viewport.y = gameState.car.y - canvas.height / 2;
 
-            // Hide game over overlay
+            engineSystem.reset();
+            tireSystem.reset();
+            carSystem.reset();
+            exhaustSystem.reset();
+            radiatorSystem.reset();
+            batterySystem.reset();
+
             document.getElementById('gameOverOverlay').style.display = 'none';
 
-            // Regenerate terrain
             generateTerrain();
         }
     </script>

@@ -128,127 +128,48 @@ function drawHandbrakeParticles(ctx, gameState) {
     ctx.restore();
 }
 
-function createFireParticle(x, y) {
-    const spread = 20;
+// Damage smoke (HP <= 20): larger, darker than exhaust
+function createDamageSmokeParticle(car) {
+    const backOffset = car.length / 2;
+    const x = car.x - Math.sin(car.rotation) * backOffset + (Math.random() - 0.5) * 8;
+    const y = car.y + Math.cos(car.rotation) * backOffset + (Math.random() - 0.5) * 8;
     return {
-        x: x + (Math.random() - 0.5) * spread,
-        y: y + (Math.random() - 0.5) * spread,
-        size: 5 + Math.random() * 5,  // Increased initial size
+        x, y,
+        size: 4 + Math.random() * 5,
         life: 1.0,
-        decay: 0.01 + Math.random() * 0.005,  // Slower decay
-        dy: -0.5 - Math.random(),  // Slower upward movement
-        dx: (Math.random() - 0.5) * 0.3  // Reduced horizontal drift
+        decay: 0.012 + Math.random() * 0.008,
+        dx: -Math.sin(car.rotation) * 0.3 + (Math.random() - 0.5) * 0.4,
+        dy: Math.cos(car.rotation) * 0.3 + (Math.random() - 0.5) * 0.4
     };
 }
 
-function updateFireParticles(gameState) {
-    if (!gameState.particles.fire) {
-        gameState.particles.fire = [];
-    }
-
-    // Remove dead particles
-    gameState.particles.fire = gameState.particles.fire.filter(p => p.life > 0);
-
-    // Update remaining particles
-    gameState.particles.fire.forEach(p => {
+function updateDamageSmokeParticles(gameState) {
+    if (gameState.car.hp > 20) return;
+    const arr = gameState.car.damageSmokeParticles;
+    gameState.car.damageSmokeParticles = arr.filter(p => p.life > 0);
+    gameState.car.damageSmokeParticles.forEach(p => {
         p.x += p.dx;
         p.y += p.dy;
         p.life -= p.decay;
-        p.size = p.size * (0.98 + (p.life * 0.01));  // Gradual size reduction tied to life
+        p.size += 0.15;
+        p.dx *= 0.96;
+        p.dy *= 0.96;
     });
-
-    const md = gameState.mapData;
-    if (md) {
-        const ts = md.tileSize;
-        const hw = md.worldWidth / 2;
-        const hh = md.worldHeight / 2;
-        const sc = Math.max(0, Math.floor((gameState.viewport.x + hw) / ts) - 1);
-        const ec = Math.min(md.width - 1, Math.ceil((gameState.viewport.x + canvas.width + hw) / ts) + 1);
-        const sr = Math.max(0, Math.floor((gameState.viewport.y + hh) / ts) - 1);
-        const er = Math.min(md.height - 1, Math.ceil((gameState.viewport.y + canvas.height + hh) / ts) + 1);
-
-        for (let ty = sr; ty <= er; ty++) {
-            for (let tx = sc; tx <= ec; tx++) {
-                if (getTerrainTypeAtTile(tx, ty) === 'fire') {
-                    const wx = -hw + tx * ts;
-                    const wy = -hh + ty * ts;
-                    gameState.particles.fire.push(createFireParticle(wx, wy));
-                }
-            }
-        }
+    for (let i = 0; i < 2; i++) {
+        gameState.car.damageSmokeParticles.push(createDamageSmokeParticle(gameState.car));
     }
 }
 
-function drawFireParticles(ctx, gameState) {
-    if (!gameState.particles.fire) return;
-
+function drawDamageSmokeParticles(ctx, gameState) {
+    if (gameState.car.hp > 20) return;
     ctx.save();
-
-    // Calculate time of day and night intensity
-    const timeOfDay = gameState.time.current * 24;
-    const isNight = timeOfDay >= 18 || timeOfDay < 6;
-    const nightIntensity = isNight ? 1 :
-        (timeOfDay >= 17 && timeOfDay < 18) ? (timeOfDay - 17) :
-            (timeOfDay >= 5 && timeOfDay < 6) ? (6 - timeOfDay) : 0;
-
-    if (nightIntensity > 0) {
-        ctx.globalCompositeOperation = 'lighter';
-        const md = gameState.mapData;
-        if (md) {
-            const ts = md.tileSize;
-            const hw = md.worldWidth / 2;
-            const hh = md.worldHeight / 2;
-            const sc = Math.max(0, Math.floor((gameState.viewport.x + hw) / ts) - 2);
-            const ec = Math.min(md.width - 1, Math.ceil((gameState.viewport.x + canvas.width + hw) / ts) + 2);
-            const sr = Math.max(0, Math.floor((gameState.viewport.y + hh) / ts) - 2);
-            const er = Math.min(md.height - 1, Math.ceil((gameState.viewport.y + canvas.height + hh) / ts) + 2);
-            const flicker = Math.sin(Date.now() / 100) * 0.1 + 0.9;
-            const glowRadius = ts * 2;
-
-            for (let ty = sr; ty <= er; ty++) {
-                for (let tx = sc; tx <= ec; tx++) {
-                    if (getTerrainTypeAtTile(tx, ty) === 'fire') {
-                        const screenX = -hw + tx * ts - gameState.viewport.x;
-                        const screenY = -hh + ty * ts - gameState.viewport.y;
-
-                        ctx.fillStyle = `rgba(255, 30, 0, ${0.15 * nightIntensity * flicker})`;
-                        ctx.beginPath();
-                        ctx.arc(screenX, screenY, glowRadius, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        ctx.fillStyle = `rgba(255, 80, 0, ${0.12 * nightIntensity * flicker})`;
-                        ctx.beginPath();
-                        ctx.arc(screenX, screenY, glowRadius * 0.5, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-            }
-        }
-    }
-
-    // Draw individual fire particles
-    gameState.particles.fire.forEach(p => {
-        const screenX = p.x - gameState.viewport.x;
-        const screenY = p.y - gameState.viewport.y;
-
-        // Base alpha enhanced at night
-        const baseAlpha = p.life * (0.7 + (nightIntensity * 0.3));
-
-        // Simple particle glow
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `rgba(255, 50, 0, ${baseAlpha})`;  // More red
+    gameState.car.damageSmokeParticles.forEach(p => {
+        const alpha = p.life * 0.5;
+        ctx.fillStyle = `rgba(40, 35, 30, ${alpha})`;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, p.size, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Particle core
-        ctx.fillStyle = `rgba(255, 120, 0, ${baseAlpha})`; // Orange-red
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, p.size * 0.6, 0, Math.PI * 2);
+        ctx.arc(p.x - gameState.viewport.x, p.y - gameState.viewport.y, p.size, 0, Math.PI * 2);
         ctx.fill();
     });
-
-    ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
 }
 

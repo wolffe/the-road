@@ -9,29 +9,34 @@ alwaysApply: true
 
 - HTML + vanilla JavaScript (no frameworks, no bundlers, no npm runtime)
 - Single `index.html` with inline `<script>` for game logic
-- Separate JS files: `constants.js`, `particles.js`, `audio.js`
+- Separate JS files: `constants.js`, `world.js`, `particles.js`, `audio.js`
 - CSS in `ui.css`
-- Map defined as a PNG image (`map2.png`) where each pixel = one terrain tile
+- Procedurally generated infinite world with a single highway road
 
 ## Architecture
 
-### Map system
+### World system (`world.js`)
 
-The map image is read at startup via `getImageData`. Each pixel's hex color maps to a terrain type via `MAP_COLORS` in `constants.js`. The raw pixel data is stored in `gameState.mapData` — the map image **is** the data, no object-per-tile array.
+The world is procedurally generated using seeded noise. A single highway road winds gently through biomes (temperate, cold, arid). Terrain is generated in 32x32-tile chunks loaded/unloaded around the player.
 
-Terrain lookups are O(1) via `getTerrainAt(worldX, worldY)` which converts world coordinates to a tile index and reads the pixel color directly.
+- `initWorld(seed)` — initialize with a seed
+- `getWorldTerrainType(tileX, tileY)` — O(1) terrain lookup from cached chunks
+- `updateWorldChunks(playerX, playerY, collectedSet)` — load nearby chunks, unload far ones
+- `getRoadCenterX(tileY)` — road position at any Y coordinate
 
-Only interactive tiles (scrap, barrel, circuit, artifact, tree, rock) get entity objects, stored in `gameState.entities` (a `Map` keyed by `"tileX,tileY"`).
+Structures (gas stations, diners, scrapyards) are placed at intervals along the road with entities (barrels, scrap, circuits, abandoned cars). Trees and rocks scatter naturally in appropriate terrain.
+
+Interactive entities are stored in `gameState.entities` (a `Map` keyed by `"tileX,tileY"`). Collected entities are tracked in `gameState.collectedTiles` so they don't respawn when chunks reload.
 
 ### Rendering
 
-`drawTerrain()` computes the visible tile range from the viewport and only iterates tiles on screen. Water tiles get animated wave effects. The same visible-range approach is used for fire particles in `particles.js`.
+`drawTerrain()` computes the visible tile range from the viewport and only iterates tiles on screen. Water tiles get animated wave effects. Texture images are drawn when available, falling back to `TERRAIN_COLORS`. A noise overlay adds visual variety.
 
 ### World coordinates
 
-- World center is `(0, 0)`, car starts there
-- Tile `(tx, ty)` maps to world position: `x = -worldWidth/2 + tx * 80`, `y = -worldHeight/2 + ty * 80`
-- `GAME_TILE_SIZE = 80` world units per tile
+- World center is `(0, 0)`, car starts there on the road
+- Tile `(tx, ty)` center is at world position `(tx * 80, ty * 80)`
+- `TILE_SIZE = 80` world units per tile (defined in `world.js`)
 
 ### Key helper functions (global scope in index.html)
 
@@ -42,23 +47,26 @@ Only interactive tiles (scrap, barrel, circuit, artifact, tree, rock) get entity
 
 ## Adding new terrain types
 
-1. Pick a unique hex color for the map pixel
-2. Add the mapping in `constants.js` → `MAP_COLORS`
-3. Add a display color in `constants.js` → `TERRAIN_COLORS`
-4. If interactive (collectible/obstacle), add the type to `ENTITY_TYPES` in `index.html`
-5. Paint pixels in `map2.png` (or use `mapGenerator.html`)
+1. Add a display color in `constants.js` → `TERRAIN_COLORS`
+2. Add generation logic in `world.js` → `getProceduralTerrainType()`
+3. If interactive (collectible/obstacle), add the type to `ENTITY_TYPES` in `index.html`
+
+## Adding new structures
+
+1. Add a template to `STRUCTURE_TEMPLATES` in `world.js` with tile layout and entity spawns
+2. Multiple variants per type are supported — just add more entries with the same weight distribution
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `index.html` | Main game (canvas, game loop, physics, UI) |
-| `constants.js` | Terrain colors, map color mappings, texture configs |
+| `world.js` | Procedural world generation (noise, road, chunks, structures) |
+| `constants.js` | Terrain colors, texture configs |
 | `particles.js` | Exhaust, handbrake smoke, fire, water splash particles |
 | `audio.js` | Sound manager using HTMLAudioElement |
 | `ui.css` | Sidebar, status bars, minimap styling |
-| `map2.png` | World map (each pixel = one 80-unit terrain tile) |
-| `mapGenerator.html` | Standalone tool to generate/convert map PNGs |
+| `tools/editor-map-colors.php` | Standalone color replacement tool for map PNGs |
 
 ## Conventions
 
