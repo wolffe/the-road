@@ -21,9 +21,15 @@ const TEXTURES = [
     { type: 'exhaust', src: 'assets/icons/exhaust.png' },
     { type: 'radiator', src: 'assets/icons/radiator.png' },
     { type: 'battery', src: 'assets/icons/battery.png' },
-    { type: 'container', src: 'assets/tiles/container.png' },
+    //{ type: 'container', src: 'assets/tiles/container.png' },
     { type: 'barrel', src: 'assets/icons/fuel.png' }
 ];
+
+/** World map: draw `assets/icons/*` pickups smaller than a tile; collision still uses full `ent.size`. */
+const ENTITY_ICON_ON_MAP_SCALE = 0.5;
+const ENTITY_ICON_MAP_TYPES = new Set([
+    'scrap', 'circuit', 'barrel', 'engine_block', 'tire', 'exhaust', 'radiator', 'battery'
+]);
 
 const RARITY_COLORS = {
     'Common': '#aaa',

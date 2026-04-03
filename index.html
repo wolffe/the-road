@@ -65,17 +65,6 @@
                             id="posY">0</span></span></small>
             </div>
 
-            <details>
-                <summary>Car Configuration</summary>
-                <div class="stat">Terrain: <span id="terrainText">grass</span></div>
-                <div class="stat">Car: <span id="carText">Standard Sedan</span></div>
-                <div class="stat">Engine: <span id="engineText">Stock 4-Cylinder</span></div>
-                <div class="stat">Tires: <span id="tireText">Standard Tires</span></div>
-                <div class="stat">Exhaust: <span id="exhaustText">Stock Exhaust</span></div>
-                <div class="stat">Radiator: <span id="radiatorText">Stock Radiator</span></div>
-                <div class="stat">Battery unit: <span id="batteryPartText">Stock Battery</span></div>
-            </details>
-
             <div class="stat">
                 <small class="muted">Trunk</small><br>
                 <small class="muted">Scrap</small> <span id="trunkText" class="font-numeric">0</span>/<span
@@ -91,6 +80,17 @@
             </div>
 
             <details>
+                <summary>Car Configuration</summary>
+                <div class="stat">Terrain: <span id="terrainText">grass</span></div>
+                <div class="stat">Car: <span id="carText">Standard Sedan</span></div>
+                <div class="stat">Engine: <span id="engineText">Stock 4-Cylinder</span></div>
+                <div class="stat">Tires: <span id="tireText">Standard Tires</span></div>
+                <div class="stat">Exhaust: <span id="exhaustText">Stock Exhaust</span></div>
+                <div class="stat">Radiator: <span id="radiatorText">Stock Radiator</span></div>
+                <div class="stat">Battery unit: <span id="batteryPartText">Stock Battery</span></div>
+            </details>
+
+            <details>
                 <summary>Game Statistics</summary>
                 <div class="stat">Total Time: <span id="totalTime" class="font-numeric">00:00:00</span></div>
                 <div class="stat">Total Distance: <span id="totalDistance" class="font-numeric">0</span> km</div>
@@ -101,8 +101,16 @@
 
             <div class="panel-section">
                 <h3>Save Game</h3>
-                <button onclick="saveGame()">Save Game</button>
-                <button onclick="eraseSave()" class="danger-button">Erase Save</button>
+                <div class="panel-section-actions">
+                    <button type="button" class="swap-modal-btn swap-modal-btn-swap" onclick="saveGame()">Save Game</button>
+                    <button type="button" class="swap-modal-btn swap-modal-btn-keep" onclick="eraseSave()">Erase Save</button>
+                </div>
+            </div>
+
+            <div>
+                <small class="muted">Game Version</small> <span class="font-numeric">0.0.1-alpha</span>
+                <br>
+                <a href="https://getbutterfly.com">getButterfly.com</a>
             </div>
         </aside>
     </div>
@@ -1001,7 +1009,8 @@
                 const sy = ent.y - vp.y;
                 if (sx < -margin || sx > canvas.width + margin || sy < -margin || sy > canvas.height + margin) continue;
 
-                const half = ent.size * 0.5;
+                const drawScale = ENTITY_ICON_MAP_TYPES.has(ent.type) ? ENTITY_ICON_ON_MAP_SCALE : 1;
+                const half = ent.size * 0.5 * drawScale;
 
                 if (images[ent.type]?.complete) {
                     ctx.drawImage(images[ent.type], sx - half, sy - half, half * 2, half * 2);

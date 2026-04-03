@@ -373,19 +373,13 @@ body {
     background: #ff0;
 }
 
-.danger-button {
-    background-color: #ff4444;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-top: 8px;
-    font-family: var(--font-ui);
-}
-
-.danger-button:hover {
-    background-color: #cc0000;
+.panel-section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+    touch-action: manipulation;
 }
 
 .swap-modal-actions {
