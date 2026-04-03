@@ -102,8 +102,10 @@
             <div class="panel-section">
                 <h3>Save Game</h3>
                 <div class="panel-section-actions">
-                    <button type="button" class="swap-modal-btn swap-modal-btn-swap" onclick="saveGame()">Save Game</button>
-                    <button type="button" class="swap-modal-btn swap-modal-btn-keep" onclick="eraseSave()">Erase Save</button>
+                    <button type="button" class="swap-modal-btn swap-modal-btn-swap" onclick="saveGame()">Save
+                        Game</button>
+                    <button type="button" class="swap-modal-btn swap-modal-btn-keep" onclick="eraseSave()">Erase
+                        Save</button>
                 </div>
             </div>
 
@@ -154,6 +156,8 @@
     </div>
 
     <script src="constants.js?1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tone@15.3.5/build/Tone.js"></script>
+    <script src="pickup-tone.js"></script>
     <script src="world.js"></script>
     <script src="engine.js"></script>
     <script src="tires.js"></script>
@@ -175,6 +179,23 @@
         ctx.msImageSmoothingEnabled = false;
 
         const MOBILE_MAX_WIDTH = 767;
+
+        /** Slightly >1 = snappier gas/brake and faster pedal ramp (tweak feel without redoing formulas). */
+        const CAR_ACCEL_TUNE = 1.1;
+        /** Base forward accel per frame (× engine × tires × car × exhaust). Top speed still from build + drag. */
+        const CAR_DRIVE_ACCEL = 0.2 * CAR_ACCEL_TUNE;
+        const CAR_BRAKE_ACCEL = 0.15 * CAR_ACCEL_TUNE;
+        /** Pedal 0→1 while holding gas/brake — scales with CAR_ACCEL_TUNE so ramp matches peak thrust. */
+        const CAR_THROTTLE_RAMP = (1 / (60 * 8)) * CAR_ACCEL_TUNE;
+        const CAR_BRAKE_RAMP = (1 / (60 * 5)) * CAR_ACCEL_TUNE;
+        /** When you release gas/brake, pedal falls so the next press ramps again. */
+        const CAR_PEDAL_DECAY = 0.06;
+        /** Per-frame linear drag while on throttle/brake (same as original 0.05 — keeps full-throttle top speed). */
+        const CAR_DRAG_DRIVING = 0.05;
+        /** Lighter drag when coasting (no gas/brake) — car rolls longer after lifting off the accelerator. */
+        const CAR_DRAG_COASTING = 0.018;
+        /** Only while towing; normal driving has no artificial top speed cap. */
+        const TOW_SPEED_CAP = 3 * 0.8;
 
         function isMobileLayout() {
             return window.innerWidth <= MOBILE_MAX_WIDTH;
@@ -271,7 +292,9 @@
                 lightsOn: true,
                 isHandbrakeOn: false,
                 turnStartTime: 0,
-                isTurning: false
+                isTurning: false,
+                throttlePedal: 0,
+                brakePedal: 0
             },
             world: { seed: 42 },
             collectedTiles: new Set(),
@@ -282,7 +305,8 @@
             time: {
                 current: 0.5,     // Start at noon (0.5 = 12:00)
                 speed: 0.1,
-                cycleLength: 180,
+                /** Real-time seconds for one full in-game day (lighting + clock UI). Higher = slower cycle. */
+                cycleLength: 960,
                 lastUpdate: Date.now(),
                 totalSeconds: 0
             },
@@ -525,19 +549,34 @@
                 (gameState.car.battery <= 0 && gameState.car.trunkBattery <= 0)) {
                 gameState.car.speed = 0;
                 gameState.car.acceleration = 0;
+                gameState.car.throttlePedal = 0;
+                gameState.car.brakePedal = 0;
                 return;
             }
+
+            const keyUp = gameState.keys['ArrowUp'] || gameState.keys['w'] || gameState.keys['W'];
+            const keyDown = gameState.keys['ArrowDown'] || gameState.keys['s'] || gameState.keys['S'];
 
             // Handle controls with improved braking and reverse
             if (engineSystem.pendingSwap || tireSystem.pendingSwap || carSystem.pendingSwap ||
                 exhaustSystem.pendingSwap || radiatorSystem.pendingSwap || batterySystem.pendingSwap) {
                 gameState.car.acceleration = 0;
                 gameState.car.speed *= 0.95;
-            } else if (gameState.keys['ArrowUp'] || gameState.keys['w'] || gameState.keys['W']) {
-                gameState.car.acceleration = 0.2 * engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
-            } else if (gameState.keys['ArrowDown'] || gameState.keys['s'] || gameState.keys['S']) {
-                gameState.car.acceleration = -0.15 * engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
+                gameState.car.throttlePedal = 0;
+                gameState.car.brakePedal = 0;
+            } else if (keyUp) {
+                gameState.car.throttlePedal = Math.min(1, gameState.car.throttlePedal + CAR_THROTTLE_RAMP);
+                gameState.car.brakePedal = Math.max(0, gameState.car.brakePedal - CAR_PEDAL_DECAY);
+                gameState.car.acceleration = CAR_DRIVE_ACCEL * gameState.car.throttlePedal *
+                    engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
+            } else if (keyDown) {
+                gameState.car.brakePedal = Math.min(1, gameState.car.brakePedal + CAR_BRAKE_RAMP);
+                gameState.car.throttlePedal = Math.max(0, gameState.car.throttlePedal - CAR_PEDAL_DECAY);
+                gameState.car.acceleration = -CAR_BRAKE_ACCEL * gameState.car.brakePedal *
+                    engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
             } else {
+                gameState.car.throttlePedal = Math.max(0, gameState.car.throttlePedal - CAR_PEDAL_DECAY);
+                gameState.car.brakePedal = Math.max(0, gameState.car.brakePedal - CAR_PEDAL_DECAY);
                 gameState.car.acceleration = 0;
             }
 
@@ -647,13 +686,11 @@
 
             // Apply physics with terrain effects
             gameState.car.speed += gameState.car.acceleration * terrainSpeedMultiplier;
-            gameState.car.speed *= 1 - (0.05 / vehicleMass);
+            const dragK = Math.abs(gameState.car.acceleration) > 1e-8 ? CAR_DRAG_DRIVING : CAR_DRAG_COASTING;
+            gameState.car.speed *= 1 - (dragK / vehicleMass);
 
-            if (gameState.towing.active) {
-                const speedCap = 3 * 0.8;
-                if (Math.abs(gameState.car.speed) > speedCap) {
-                    gameState.car.speed = Math.sign(gameState.car.speed) * speedCap;
-                }
+            if (gameState.towing.active && Math.abs(gameState.car.speed) > TOW_SPEED_CAP) {
+                gameState.car.speed = Math.sign(gameState.car.speed) * TOW_SPEED_CAP;
             }
 
             // Add tire tracks for appropriate terrain
@@ -739,6 +776,8 @@
                         // Stop the car
                         gameState.car.speed = 0;
                         gameState.car.acceleration = 0;
+                        gameState.car.throttlePedal = 0;
+                        gameState.car.brakePedal = 0;
 
                         // Minimal push back
                         const pushAngle = Math.atan2(dy, dx);
@@ -805,6 +844,7 @@
                         gameState.car.trunk = Math.round(Math.min(gameState.car.trunk + 10, gameState.car.maxTrunk));
                         showNotification('Scrap stored in trunk: +10');
                     }
+                    if (typeof playIconPickupSound === 'function') playIconPickupSound();
                     point.active = false;
                 } else if (point.type === 'barrel') {
                     const fuelNeeded = gameState.car.maxFuel - gameState.car.fuel;
@@ -821,6 +861,7 @@
                         gameState.car.trunkFuel = Math.round(Math.min(gameState.car.trunkFuel + 10, gameState.car.maxTrunkFuel));
                         showNotification('Fuel stored in trunk: +10');
                     }
+                    if (typeof playIconPickupSound === 'function') playIconPickupSound();
                     point.active = false;
                 } else if (point.type === 'circuit') {
                     const batteryNeeded = gameState.car.maxBattery - gameState.car.battery;
@@ -837,6 +878,7 @@
                         gameState.car.trunkBattery = Math.round(Math.min(gameState.car.trunkBattery + 10, gameState.car.maxTrunkBattery));
                         showNotification('Circuits stored in trunk: +10');
                     }
+                    if (typeof playIconPickupSound === 'function') playIconPickupSound();
                     point.active = false;
                 } else if (point.type === 'engine_block') {
                     if (engineSystem.canInteract()) {
@@ -1754,6 +1796,8 @@
             gameState.car.rotation = 0;
             gameState.car.speed = 0;
             gameState.car.acceleration = 0;
+            gameState.car.throttlePedal = 0;
+            gameState.car.brakePedal = 0;
             gameState.car.hp = 100;
             gameState.car.fuel = 100;
             gameState.car.battery = 100;

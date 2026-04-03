@@ -1,6 +1,9 @@
+/** Temporarily off: no engine loop load/play/update (drift, splash, impact unchanged). */
+const ENGINE_SOUND_ENABLED = false;
+
 const SOUNDS = {
     engine: {
-        src: 'sounds/engine-loop.mp3',
+        src: 'assets/audio/engine-loop.mp3',
         loop: true,
         volume: 0.4
     },
@@ -11,10 +14,6 @@ const SOUNDS = {
     impact: {
         src: 'sounds/impact.ogg',
         volume: 0.5
-    },
-    collect: {
-        src: 'sounds/collect.mp3',
-        volume: 0.6
     },
     drift: {
         src: 'sounds/tire-squeal.mp3',
@@ -31,6 +30,7 @@ class AudioManager {
 
     async loadSounds() {
         for (const [key, sound] of Object.entries(SOUNDS)) {
+            if (key === 'engine' && !ENGINE_SOUND_ENABLED) continue;
             try {
                 const audio = new Audio(sound.src);
                 audio.loop = !!sound.loop;
@@ -54,6 +54,7 @@ class AudioManager {
     }
 
     playSound(name, loop = false) {
+        if (name === 'engine' && !ENGINE_SOUND_ENABLED) return;
         if (!this.audioElements.has(name)) return;
 
         const audio = this.audioElements.get(name);
@@ -62,10 +63,11 @@ class AudioManager {
 
         audio.loop = loop;
         audio.currentTime = 0;
-        audio.play().catch(() => {});
+        audio.play().catch(() => { });
     }
 
     stopSound(name) {
+        if (name === 'engine' && !ENGINE_SOUND_ENABLED) return;
         if (!this.audioElements.has(name)) return;
 
         const audio = this.audioElements.get(name);
@@ -73,15 +75,26 @@ class AudioManager {
         audio.currentTime = 0;
     }
 
+    /**
+     * Engine loop: HTMLAudioElement.playbackRate changes pitch and loop speed together
+     * (same as tape deck / sampler — good enough for arcade; for “RPM without chipmunk tempo”
+     * you’d use Tone.PitchShift or layered samples instead).
+     */
     updateEngineSound(speed) {
+        if (!ENGINE_SOUND_ENABLED) return;
         if (!this.audioElements.has('engine')) return;
 
         const audio = this.audioElements.get('engine');
         if (audio.paused) return;
 
         const absSpeed = Math.abs(speed);
-        audio.playbackRate = 0.5 + Math.min(absSpeed, 2) * 1.25;
-        audio.volume = Math.min(0.4, 0.2 + absSpeed * 0.1) * this.masterVolume;
+        const maxSpeed = 2.4;
+        const t = Math.min(absSpeed / maxSpeed, 1);
+        const shaped = Math.pow(t, 0.82);
+        const rateMin = 0.78;
+        const rateMax = 2.05;
+        audio.playbackRate = rateMin + shaped * (rateMax - rateMin);
+        audio.volume = Math.min(0.45, 0.18 + shaped * 0.28) * this.masterVolume;
     }
 
     setMasterVolume(value) {

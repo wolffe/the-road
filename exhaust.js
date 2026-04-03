@@ -77,6 +77,7 @@ const exhaustSystem = {
 
     acceptSwap() {
         if (!this.pendingSwap) return;
+        if (typeof playIconPickupSound === 'function') playIconPickupSound();
         this.current = this.pendingSwap;
         if (this.pendingEntity) {
             this.pendingEntity.active = false;

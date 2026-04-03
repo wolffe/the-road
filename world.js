@@ -1,7 +1,10 @@
 const TILE_SIZE = 80;
 const CHUNK_SIZE = 32;
 const ROAD_HALF_WIDTH = 2;
-const STRUCTURE_SPACING = 50;
+/** Average tile gap along the road between structure anchor points (larger = farther apart). */
+const STRUCTURE_SPACING = 100;
+/** Random offset along Y per segment, as multiple of STRUCTURE_SPACING (4 → ±2× spacing). */
+const STRUCTURE_JITTER_IN_SPACING = 4;
 const CHUNK_LOAD_RADIUS = 3;
 const CHUNK_UNLOAD_RADIUS = 5;
 
@@ -66,7 +69,8 @@ function getProceduralTerrainType(tileX, tileY) {
 
     const elevation = noise2D(tileX * 0.015, tileY * 0.015, 300);
     const moisture = noise2D(tileX * 0.01, tileY * 0.01, 400);
-    const biome = noise1D(tileY * 0.0008, 500);
+    /** Lower coefficient = slower change along the road = larger biome bands (was 0.0008). */
+    const biome = noise1D(tileY * 0.0004, 500);
 
     if (biome < 0.3) {
         if (elevation > 0.7) return 'rock';
@@ -217,7 +221,8 @@ const STRUCTURE_TEMPLATES = [
 
 function getStructurePlacement(segmentIndex) {
     const n = noise1D(segmentIndex * 17.3, 600);
-    const tileY = segmentIndex * STRUCTURE_SPACING + Math.floor((n - 0.5) * 200);
+    const tileY = segmentIndex * STRUCTURE_SPACING +
+        Math.floor((n - 0.5) * STRUCTURE_SPACING * STRUCTURE_JITTER_IN_SPACING);
 
     const totalWeight = STRUCTURE_TEMPLATES.reduce((s, t) => s + t.weight, 0);
     const typeN = noise1D(segmentIndex * 31.7, 700);
