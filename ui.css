@@ -1,3 +1,12 @@
+:root {
+    --font-ui: 'Ubuntu Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-numeric: 'Ubuntu Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+}
+
+.font-numeric {
+    font-family: var(--font-numeric);
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -7,6 +16,110 @@ body {
     height: 100vh;
     height: 100dvh;
     touch-action: none;
+    font-family: var(--font-ui);
+}
+
+.muted {
+    color: #8ea0b1;
+}
+
+.tow-hint {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: #4488aa;
+    padding: 8px 16px;
+    border-radius: 5px;
+    display: none;
+    z-index: 1000;
+    font-size: 14px;
+    font-family: var(--font-ui);
+}
+
+#notifications {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    display: none;
+    z-index: 1000;
+    font-family: var(--font-ui);
+}
+
+#loadingOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #111;
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 16px;
+    font-family: var(--font-ui);
+}
+
+#gameOverOverlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 2000;
+    color: white;
+    font-family: var(--font-ui);
+}
+
+.game-over-dialog {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.9);
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid #ff0000;
+}
+
+.game-over-title {
+    color: #ff0000;
+    margin-bottom: 20px;
+}
+
+.game-over-reason {
+    color: #ff6666;
+    margin-bottom: 15px;
+}
+
+.game-over-stats {
+    text-align: left;
+    margin: 20px 0;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 5px;
+}
+
+.game-over-restart {
+    background: #ff0000;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+    border-radius: 5px;
+    font-family: var(--font-ui);
 }
 
 #appLayout {
@@ -42,7 +155,7 @@ body {
     background: rgba(0, 0, 0, 0.8);
     color: white;
     padding: 20px;
-    font-family: monospace;
+    font-family: var(--font-ui);
     overflow: auto;
     height: 100vh;
     box-sizing: border-box;
@@ -116,7 +229,7 @@ body {
         border-radius: 8px;
         background: #2a2a2a;
         color: #eee;
-        font-family: monospace;
+        font-family: var(--font-ui);
         font-size: 14px;
         cursor: pointer;
         touch-action: manipulation;
@@ -170,7 +283,7 @@ body {
         border-radius: 6px;
         background: #222;
         color: #ddd;
-        font-family: monospace;
+        font-family: var(--font-ui);
         font-size: 14px;
         cursor: pointer;
         -webkit-tap-highlight-color: transparent;
@@ -268,10 +381,56 @@ body {
     border-radius: 4px;
     cursor: pointer;
     margin-top: 8px;
+    font-family: var(--font-ui);
 }
 
 .danger-button:hover {
     background-color: #cc0000;
+}
+
+.swap-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 14px;
+    touch-action: manipulation;
+}
+
+.swap-modal-btn {
+    flex: 1 1 auto;
+    min-width: 120px;
+    min-height: 44px;
+    padding: 10px 16px;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    border-radius: 6px;
+    border: 2px solid #666;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.15);
+}
+
+.swap-modal-btn-swap {
+    background: #2a4a2a;
+    border-color: #4f4;
+    color: #cfc;
+}
+
+.swap-modal-btn-keep {
+    background: #3a2a2a;
+    border-color: #844;
+    color: #ccc;
+}
+
+.swap-modal-keyboard-hint {
+    margin: 10px 0 0;
+    color: #888;
+    font-size: 11px;
+    font-family: var(--font-ui);
+}
+
+body.mobile-layout .swap-modal-keyboard-hint {
+    display: none;
 }
 
 /* Portrait preference on phones (mobile width only) */
@@ -286,7 +445,7 @@ body {
     justify-content: center;
     text-align: center;
     padding: 24px;
-    font-family: monospace;
+    font-family: var(--font-ui);
     font-size: 16px;
     line-height: 1.5;
 }

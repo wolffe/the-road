@@ -58,13 +58,13 @@ const exhaustSystem = {
             '<div style="display:flex;gap:30px;justify-content:center">' +
             '<div style="text-align:center"><h3 style="color:#888;margin:0 0 8px">CURRENT</h3>' +
             '<p style="color:' + curColor + ';font-size:14px;margin:4px 0">' + cur.name + '</p>' +
-            '<p style="margin:4px 0">Power: ' + Math.round(cur.power * 100) + '%</p></div>' +
+            '<p style="margin:4px 0">Power: ' + fontNumericHtml(Math.round(cur.power * 100)) + '%</p></div>' +
             '<div style="display:flex;align-items:center;font-size:24px;color:#666">\u2192</div>' +
             '<div style="text-align:center"><h3 style="color:#8a6644;margin:0 0 8px">FOUND</h3>' +
             '<p style="color:' + fndColor + ';font-size:14px;margin:4px 0">' + fnd.name + '</p>' +
-            '<p style="color:' + pc + ';margin:4px 0">Power: ' + Math.round(fnd.power * 100) + '% ' + pa + '</p></div></div>' +
+            '<p style="color:' + pc + ';margin:4px 0">Power: ' + fontNumericHtml(Math.round(fnd.power * 100)) + '% ' + pa + '</p></div></div>' +
             '<p style="margin-top:14px;color:#a33;font-size:11px">Swapping is permanent.</p>' +
-            '<p style="margin-top:10px;color:#888;font-size:12px">Press <span style="color:#4f4">E</span> to Swap | <span style="color:#f44">Escape</span> to Keep</p>';
+            SWAP_MODAL_ACTIONS_HTML;
 
         this.overlayEl.style.display = 'flex';
     },
@@ -106,13 +106,14 @@ const exhaustSystem = {
     _createOverlay() {
         const overlay = document.createElement('div');
         overlay.id = 'exhaustSwapOverlay';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:2500;display:none;align-items:center;justify-content:center;font-family:monospace;color:#ccc';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:2500;display:none;align-items:center;justify-content:center;font-family:var(--font-ui),sans-serif;color:#ccc';
         const panel = document.createElement('div');
         panel.id = 'exhaustSwapContent';
         panel.style.cssText = 'background:rgba(0,0,0,0.9);border:2px solid #8a6644;border-radius:10px;padding:25px;text-align:center;min-width:350px';
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
         this.overlayEl = overlay;
+        bindSwapModalOverlayClicks(overlay, this);
     },
 
     _bindKeys() {

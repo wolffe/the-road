@@ -8,6 +8,9 @@ const CHUNK_UNLOAD_RADIUS = 5;
 let worldSeed = 42;
 const worldChunks = new Map();
 
+// Skip spawning pickups / scattering trees on these tiles (structure art); not used for driving collision
+const BLOCKABLE_SPAWN_TERRAIN = new Set(['container', 'concrete', 'water_tower']);
+
 // ===== Noise =====
 
 function fract(n) { return n - Math.floor(n); }
@@ -112,8 +115,8 @@ const STRUCTURE_TEMPLATES = [
         weight: 0.3,
         width: 5, height: 4,
         tiles: [
-            ['block', 'block', 'block', 'road', 'road'],
-            ['block', 'block', 'block', 'road', 'road'],
+            ['concrete', 'concrete', 'concrete', 'road', 'road'],
+            ['concrete', 'concrete', 'concrete', 'road', 'road'],
             ['road', 'road', 'road', 'road', 'road'],
             ['road', 'road', 'road', 'road', 'road'],
         ],
@@ -121,7 +124,7 @@ const STRUCTURE_TEMPLATES = [
             { rx: 3, ry: 2, type: 'scrap' },
             { rx: 4, ry: 2, type: 'circuit' },
             { rx: 3, ry: 0, type: 'circuit' },
-            { rx: 0, ry: 0, type: 'vehicle' },
+            { rx: 4, ry: 0, type: 'vehicle' },
             { rx: 4, ry: 1, type: 'battery' },
         ]
     },
@@ -158,8 +161,8 @@ const STRUCTURE_TEMPLATES = [
             ['road', 'road', 'road', 'road'],
         ],
         entities: [
-            { rx: 1, ry: 1, type: 'barrel' },
-            { rx: 2, ry: 2, type: 'scrap' },
+            { rx: 0, ry: 1, type: 'barrel' },
+            { rx: 3, ry: 2, type: 'scrap' },
         ]
     },
     {
@@ -174,10 +177,10 @@ const STRUCTURE_TEMPLATES = [
             ['container', 'container', 'road', 'road', 'container', 'container'],
         ],
         entities: [
-            { rx: 0, ry: 0, type: 'scrap' },
-            { rx: 5, ry: 0, type: 'scrap' },
+            { rx: 2, ry: 0, type: 'scrap' },
+            { rx: 3, ry: 0, type: 'scrap' },
             { rx: 2, ry: 1, type: 'circuit' },
-            { rx: 4, ry: 4, type: 'barrel' },
+            { rx: 2, ry: 4, type: 'barrel' },
         ]
     },
     {
@@ -185,7 +188,7 @@ const STRUCTURE_TEMPLATES = [
         weight: 0.25,
         width: 6, height: 4,
         tiles: [
-            ['block', 'parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road'],
+            ['concrete', 'parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road'],
             ['parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road'],
             ['parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road'],
             ['road', 'road', 'road', 'road', 'road', 'road'],
@@ -197,6 +200,20 @@ const STRUCTURE_TEMPLATES = [
         ]
     },
 ];
+
+(function validateStructureTemplateEntities() {
+    for (const tmpl of STRUCTURE_TEMPLATES) {
+        for (const ent of tmpl.entities) {
+            const t = tmpl.tiles[ent.ry][ent.rx];
+            if (BLOCKABLE_SPAWN_TERRAIN.has(t)) {
+                console.warn(
+                    `[world] Template "${tmpl.name}": entity "${ent.type}" at template (${ent.rx},${ent.ry}) is on solid terrain "${t}"` +
+                    ' — pick a road/parking_lot/mud/garage cell instead.'
+                );
+            }
+        }
+    }
+})();
 
 function getStructurePlacement(segmentIndex) {
     const n = noise1D(segmentIndex * 17.3, 600);
@@ -284,7 +301,7 @@ function generateChunk(cx, cy, collectedSet) {
             }
         }
 
-        // Spawn structure entities
+        // Spawn structure entities (skip tiles that are solid / impassable, e.g. container walls)
         for (const ent of tmpl.entities) {
             const ex = p.startX + (p.side > 0 ? ent.rx : tmpl.width - 1 - ent.rx);
             const ey = p.startY + ent.ry;
@@ -293,6 +310,10 @@ function generateChunk(cx, cy, collectedSet) {
             if (lx < 0 || lx >= CHUNK_SIZE || ly < 0 || ly >= CHUNK_SIZE) continue;
             const key = `${ex},${ey}`;
             if (collectedSet && collectedSet.has(key)) continue;
+            const cellTerrain = terrain[ly * CHUNK_SIZE + lx];
+            if (BLOCKABLE_SPAWN_TERRAIN.has(cellTerrain)) {
+                continue;
+            }
             entities.push({
                 type: ent.type, x: ex * TILE_SIZE, y: ey * TILE_SIZE,
                 tileX: ex, tileY: ey, size: TILE_SIZE, active: true
@@ -300,7 +321,9 @@ function generateChunk(cx, cy, collectedSet) {
         }
     }
 
-    // Scatter trees and rocks
+    const occupiedByStructure = new Set(entities.map((e) => `${e.tileX},${e.tileY}`));
+
+    // Scatter trees and rocks (never on tiles already used by structure pickups)
     for (let ly = 0; ly < CHUNK_SIZE; ly++) {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             const tx = startTX + lx;
@@ -308,6 +331,8 @@ function generateChunk(cx, cy, collectedSet) {
             const tt = terrain[ly * CHUNK_SIZE + lx];
             const key = `${tx},${ty}`;
             if (collectedSet && collectedSet.has(key)) continue;
+            if (occupiedByStructure.has(key)) continue;
+            if (BLOCKABLE_SPAWN_TERRAIN.has(tt)) continue;
 
             if ((tt === 'grass' || tt === 'highgrass') && hash2(tx * 0.7, ty * 0.7, 800) > 0.95) {
                 const treeType = (tx + ty) % 2 === 0 ? 'tree_1' : 'tree_2';
@@ -315,11 +340,13 @@ function generateChunk(cx, cy, collectedSet) {
                     type: treeType, x: tx * TILE_SIZE, y: ty * TILE_SIZE,
                     tileX: tx, tileY: ty, size: TILE_SIZE, active: true
                 });
+                occupiedByStructure.add(key);
             } else if ((tt === 'hill' || tt === 'rock') && hash2(tx * 0.7, ty * 0.7, 900) > 0.97) {
                 entities.push({
                     type: 'rock', x: tx * TILE_SIZE, y: ty * TILE_SIZE,
                     tileX: tx, tileY: ty, size: TILE_SIZE, active: true
                 });
+                occupiedByStructure.add(key);
             }
         }
     }

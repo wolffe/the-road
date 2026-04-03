@@ -62,22 +62,20 @@ const tireSystem = {
             '<h3 style="color:#888;margin:0 0 8px">CURRENT</h3>' +
             '<p style="color:' + curColor + ';font-size:14px;margin:4px 0">' + cur.name + '</p>' +
             '<p style="color:' + curColor + ';font-size:11px;margin:2px 0">' + cur.rarity + '</p>' +
-            '<p style="margin:4px 0">Speed: ' + Math.round(cur.speed * 100) + '%</p>' +
-            '<p style="margin:4px 0">Grip: ' + Math.round(cur.grip * 100) + '%</p>' +
+            '<p style="margin:4px 0">Speed: ' + fontNumericHtml(Math.round(cur.speed * 100)) + '%</p>' +
+            '<p style="margin:4px 0">Grip: ' + fontNumericHtml(Math.round(cur.grip * 100)) + '%</p>' +
             '</div>' +
             '<div style="display:flex;align-items:center;font-size:24px;color:#666">\u2192</div>' +
             '<div style="text-align:center">' +
             '<h3 style="color:#aa8844;margin:0 0 8px">FOUND</h3>' +
             '<p style="color:' + fndColor + ';font-size:14px;margin:4px 0">' + fnd.name + '</p>' +
             '<p style="color:' + fndColor + ';font-size:11px;margin:2px 0">' + fnd.rarity + '</p>' +
-            '<p style="color:' + sc + ';margin:4px 0">Speed: ' + Math.round(fnd.speed * 100) + '% ' + sa + '</p>' +
-            '<p style="color:' + gc + ';margin:4px 0">Grip: ' + Math.round(fnd.grip * 100) + '% ' + ga + '</p>' +
+            '<p style="color:' + sc + ';margin:4px 0">Speed: ' + fontNumericHtml(Math.round(fnd.speed * 100)) + '% ' + sa + '</p>' +
+            '<p style="color:' + gc + ';margin:4px 0">Grip: ' + fontNumericHtml(Math.round(fnd.grip * 100)) + '% ' + ga + '</p>' +
             '</div>' +
             '</div>' +
             '<p style="margin-top:14px;color:#a33;font-size:11px">Swapping is permanent - your current tires will be lost.</p>' +
-            '<p style="margin-top:10px;color:#888;font-size:12px">' +
-            'Press <span style="color:#4f4">E</span> to Swap | Press <span style="color:#f44">Escape</span> to Keep' +
-            '</p>';
+            SWAP_MODAL_ACTIONS_HTML;
 
         this.overlayEl.style.display = 'flex';
     },
@@ -125,7 +123,7 @@ const tireSystem = {
         overlay.id = 'tireSwapOverlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
             'background:rgba(0,0,0,0.7);z-index:2500;display:none;' +
-            'align-items:center;justify-content:center;font-family:monospace;color:#ccc';
+            'align-items:center;justify-content:center;font-family:var(--font-ui),sans-serif;color:#ccc';
 
         const panel = document.createElement('div');
         panel.id = 'tireSwapContent';
@@ -135,6 +133,7 @@ const tireSystem = {
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
         this.overlayEl = overlay;
+        bindSwapModalOverlayClicks(overlay, this);
     },
 
     _bindKeys() {

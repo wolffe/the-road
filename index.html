@@ -11,6 +11,14 @@
     <meta name="apple-mobile-web-app-title" content="The Road">
     <link rel="manifest" href="site.webmanifest">
 
+    <script src="https://unpkg.com/akar-icons-fonts"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Ubuntu+Sans:ital,wght@0,100..800;1,100..800&display=swap"
+        rel="stylesheet">
+
     <link rel="stylesheet" href="ui.css" type="text/css">
 </head>
 
@@ -20,68 +28,82 @@
             <div id="gameContainer"></div>
         </div>
         <aside id="statusPanel">
-        <button type="button" id="mobilePanelToggle" class="mobile-panel-toggle" aria-expanded="false" aria-controls="statusPanel">
-            <span class="mobile-panel-toggle-label">Stats</span>
-            <span class="mobile-panel-toggle-icon" aria-hidden="true">▲</span>
-        </button>
-        <div id="minimapContainer">
-            <canvas id="minimap"></canvas>
-        </div>
-        <div class="stat">
-            <div>HP: <span id="hpText">100</span>/100</div>
-            <div id="hpBar" class="bar-wrap">
-                <div id="hpBarFill" class="bar-fill"></div>
+            <button type="button" id="mobilePanelToggle" class="mobile-panel-toggle" aria-expanded="false"
+                aria-controls="statusPanel">
+                <span class="mobile-panel-toggle-label">Stats</span>
+                <span class="mobile-panel-toggle-icon" aria-hidden="true">▲</span>
+            </button>
+            <div id="minimapContainer">
+                <canvas id="minimap"></canvas>
             </div>
-        </div>
-        <div class="stat">
-            <div>Battery: <span id="batteryText">100</span>/100</div>
-            <div id="batteryBar" class="bar-wrap">
-                <div id="batteryBarFill" class="bar-fill"></div>
+            <div class="stat">
+                <div><small class="muted">HP</small> <span id="hpText" class="font-numeric">100</span><span
+                        class="font-numeric">/100</span></div>
+                <div id="hpBar" class="bar-wrap">
+                    <div id="hpBarFill" class="bar-fill"></div>
+                </div>
             </div>
-        </div>
-        <div class="stat">
-            <div>Fuel: <span id="fuelText">100</span>/100</div>
-            <div id="fuelBar" class="bar-wrap">
-                <div id="fuelBarFill" class="bar-fill"></div>
+            <div class="stat">
+                <div><small class="muted">Battery</small> <span id="batteryText" class="font-numeric">100</span><span
+                        class="font-numeric">/100</span></div>
+                <div id="batteryBar" class="bar-wrap">
+                    <div id="batteryBarFill" class="bar-fill"></div>
+                </div>
             </div>
-        </div>
-        <div class="stat">Speed: <span id="speedText">0</span> km/h</div>
-        <div class="stat">Position:<br>
-            X: <span id="posX">0</span><br>
-            Y: <span id="posY">0</span>
-        </div>
+            <div class="stat">
+                <div><small class="muted">Fuel</small> <span id="fuelText" class="font-numeric">100</span><span
+                        class="font-numeric">/100</span>
+                </div>
+                <div id="fuelBar" class="bar-wrap">
+                    <div id="fuelBarFill" class="bar-fill"></div>
+                </div>
+            </div>
+            <div class="stat">
+                <span id="speedText" class="font-numeric">0</span> km/h
+                <br>
+                <small class="muted"><span class="font-numeric">@<span id="posX">0</span>, <span
+                            id="posY">0</span></span></small>
+            </div>
 
-        <details>
-            <summary>Stats</summary>
-            <div class="stat">Terrain: <span id="terrainText">grass</span></div>
-            <div class="stat">Car: <span id="carText">Standard Sedan</span></div>
-            <div class="stat">Engine: <span id="engineText">Stock 4-Cylinder</span></div>
-            <div class="stat">Tires: <span id="tireText">Standard Tires</span></div>
-            <div class="stat">Exhaust: <span id="exhaustText">Stock Exhaust</span></div>
-            <div class="stat">Radiator: <span id="radiatorText">Stock Radiator</span></div>
-            <div class="stat">Battery unit: <span id="batteryPartText">Stock Battery</span></div>
-        </details>
+            <details>
+                <summary>Car Configuration</summary>
+                <div class="stat">Terrain: <span id="terrainText">grass</span></div>
+                <div class="stat">Car: <span id="carText">Standard Sedan</span></div>
+                <div class="stat">Engine: <span id="engineText">Stock 4-Cylinder</span></div>
+                <div class="stat">Tires: <span id="tireText">Standard Tires</span></div>
+                <div class="stat">Exhaust: <span id="exhaustText">Stock Exhaust</span></div>
+                <div class="stat">Radiator: <span id="radiatorText">Stock Radiator</span></div>
+                <div class="stat">Battery unit: <span id="batteryPartText">Stock Battery</span></div>
+            </details>
 
-        <div class="stat">
-            Trunk:<br>
-            Scrap: <span id="trunkText">0</span>/<span id="maxTrunkText">500</span><br>
-            Circuits: <span id="trunkBatteryText">0</span>/<span id="maxTrunkBatteryText">500</span><br>
-            Fuel: <span id="trunkFuelText">0</span>/<span id="maxTrunkFuelText">250</span>
-        </div>
-        <div class="stat">
-            Time: <span id="timeText">12:00</span><br>
-            <span id="dayPhaseText">Noon</span>
-        </div>
-        <div class="stat">Total Time: <span id="totalTime">00:00:00</span></div>
-        <div class="stat">Total Distance: <span id="totalDistance">0.00</span> km</div>
-        <div class="stat">Lights: <span id="lightsStatus">ON</span></div>
-        <div class="stat">Towing: <span id="towingStatus">No</span></div>
+            <div class="stat">
+                <small class="muted">Trunk</small><br>
+                <small class="muted">Scrap</small> <span id="trunkText" class="font-numeric">0</span>/<span
+                    id="maxTrunkText" class="font-numeric">500</span><br>
+                <small class="muted">Circuits</small> <span id="trunkBatteryText" class="font-numeric">0</span>/<span
+                    id="maxTrunkBatteryText" class="font-numeric">500</span><br>
+                <small class="muted">Fuel</small> <span id="trunkFuelText" class="font-numeric">0</span>/<span
+                    id="maxTrunkFuelText" class="font-numeric">250</span>
+            </div>
+            <div class="stat">
+                <i class="ai-clock muted"></i> <span id="timeText" class="font-numeric">12:00</span> (<span
+                    id="dayPhaseText">Noon</span>)
+            </div>
 
-        <div class="panel-section">
-            <h3>Save Game</h3>
-            <button onclick="saveGame()">Save Game</button>
-            <button onclick="eraseSave()" class="danger-button">Erase Save</button>
-        </div>
+            <details>
+                <summary>Game Statistics</summary>
+                <div class="stat">Total Time: <span id="totalTime" class="font-numeric">00:00:00</span></div>
+                <div class="stat">Total Distance: <span id="totalDistance" class="font-numeric">0</span> km</div>
+            </details>
+
+            <div class="stat">Lights: <span id="lightsStatus">ON</span></div>
+            <div class="stat">Towing: <span id="towingStatus">No</span></div>
+
+            <div class="panel-section">
+                <h3>Save Game</h3>
+                <button onclick="saveGame()">Save Game</button>
+                <button onclick="eraseSave()" class="danger-button">Erase Save</button>
+            </div>
         </aside>
     </div>
 
@@ -91,48 +113,35 @@
             <button type="button" class="touch-btn" id="touchRight" aria-label="Steer right">▶</button>
         </div>
         <div class="touch-pad touch-pad-pedals">
-            <button type="button" class="touch-btn touch-btn-pedal" id="touchBrake" aria-label="Brake / reverse">▼</button>
-            <button type="button" class="touch-btn touch-btn-pedal touch-btn-primary" id="touchAccel" aria-label="Accelerate">▲</button>
+            <button type="button" class="touch-btn touch-btn-pedal" id="touchBrake"
+                aria-label="Brake / reverse">▼</button>
+            <button type="button" class="touch-btn touch-btn-pedal touch-btn-primary" id="touchAccel"
+                aria-label="Accelerate">▲</button>
         </div>
     </div>
 
-    <div id="towHint" class="tow-hint"
-         style="position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-         background: rgba(0,0,0,0.7); color: #4488aa; padding: 8px 16px; border-radius: 5px;
-         display: none; z-index: 1000; font-family: monospace; font-size: 14px;">
+    <div id="towHint" class="tow-hint">
         Press T to tow
     </div>
 
-    <div id="notifications" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
-         background: rgba(0,0,0,0.7); color: white; padding: 10px 20px; border-radius: 5px; 
-         display: none; z-index: 1000; font-family: monospace;">
-    </div>
+    <div id="notifications"></div>
 
     <div id="mobileRotateHint" class="mobile-rotate-hint">Best in portrait — rotate your device</div>
 
-    <div id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-         background: #111; z-index: 5000; display: flex; align-items: center; justify-content: center;
-         font-family: monospace; color: #888; font-size: 16px;">
+    <div id="loadingOverlay">
         Loading...
     </div>
 
     <!-- Add Game Over overlay -->
-    <div id="gameOverOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-         background: rgba(0, 0, 0, 0.8); z-index: 2000; color: white; font-family: monospace;">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-             text-align: center; background: rgba(0, 0, 0, 0.9); padding: 20px; border-radius: 10px;
-             border: 2px solid #ff0000;">
-            <h1 style="color: #ff0000; margin-bottom: 20px;">GAME OVER</h1>
-            <p id="gameOverReason" style="color: #ff6666; margin-bottom: 15px;"></p>
-            <div id="gameOverStats" style="text-align: left; margin: 20px 0; padding: 10px; 
-                 background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
-                <p>Time Played: <span id="gameOverTime"></span></p>
-                <p>Distance Traveled: <span id="gameOverDistance"></span> km</p>
+    <div id="gameOverOverlay">
+        <div class="game-over-dialog">
+            <h1 class="game-over-title">GAME OVER</h1>
+            <p id="gameOverReason" class="game-over-reason"></p>
+            <div id="gameOverStats" class="game-over-stats">
+                <p>Time Played: <span id="gameOverTime" class="font-numeric"></span></p>
+                <p>Distance Traveled: <span id="gameOverDistance" class="font-numeric"></span> km</p>
             </div>
-            <button onclick="restartGame()" style="background: #ff0000; color: white; border: none; 
-                    padding: 10px 20px; margin-top: 20px; cursor: pointer; border-radius: 5px;">
-                Restart Game
-            </button>
+            <button type="button" class="game-over-restart" onclick="restartGame()">Restart Game</button>
         </div>
     </div>
 
@@ -749,12 +758,12 @@
             document.getElementById('posY').textContent = Math.round(gameState.car.y);
             document.getElementById('terrainText').textContent = carTerrainType;
             document.getElementById('towingStatus').textContent = gameState.towing.active ? 'Yes' : 'No';
-            document.getElementById('trunkText').textContent = gameState.car.trunk;
-            document.getElementById('maxTrunkText').textContent = gameState.car.maxTrunk;
-            document.getElementById('trunkFuelText').textContent = gameState.car.trunkFuel;
-            document.getElementById('maxTrunkFuelText').textContent = gameState.car.maxTrunkFuel;
-            document.getElementById('trunkBatteryText').textContent = gameState.car.trunkBattery;
-            document.getElementById('maxTrunkBatteryText').textContent = gameState.car.maxTrunkBattery;
+            document.getElementById('trunkText').textContent = Math.round(gameState.car.trunk);
+            document.getElementById('maxTrunkText').textContent = Math.round(gameState.car.maxTrunk);
+            document.getElementById('trunkFuelText').textContent = Math.round(gameState.car.trunkFuel);
+            document.getElementById('maxTrunkFuelText').textContent = Math.round(gameState.car.maxTrunkFuel);
+            document.getElementById('trunkBatteryText').textContent = Math.round(gameState.car.trunkBattery);
+            document.getElementById('maxTrunkBatteryText').textContent = Math.round(gameState.car.maxTrunkBattery);
 
             // Change HP bar color based on health
             const hpBarFill = document.getElementById('hpBarFill');
@@ -781,11 +790,11 @@
                         if (gameState.car.hp > 100) {
                             const excess = gameState.car.hp - 100;
                             gameState.car.hp = 100;
-                            gameState.car.trunk = Math.min(gameState.car.trunk + excess, gameState.car.maxTrunk);
-                            showNotification(`Excess scrap stored in trunk: +${excess}`);
+                            gameState.car.trunk = Math.round(Math.min(gameState.car.trunk + excess, gameState.car.maxTrunk));
+                            showNotification(`Excess scrap stored in trunk: +${Math.round(excess)}`);
                         }
                     } else {
-                        gameState.car.trunk = Math.min(gameState.car.trunk + 10, gameState.car.maxTrunk);
+                        gameState.car.trunk = Math.round(Math.min(gameState.car.trunk + 10, gameState.car.maxTrunk));
                         showNotification('Scrap stored in trunk: +10');
                     }
                     point.active = false;
@@ -797,11 +806,11 @@
                         if (gameState.car.fuel > gameState.car.maxFuel) {
                             const excess = gameState.car.fuel - gameState.car.maxFuel;
                             gameState.car.fuel = gameState.car.maxFuel;
-                            gameState.car.trunkFuel = Math.min(gameState.car.trunkFuel + excess, gameState.car.maxTrunkFuel);
-                            showNotification(`Excess fuel stored in trunk: +${excess}`);
+                            gameState.car.trunkFuel = Math.round(Math.min(gameState.car.trunkFuel + excess, gameState.car.maxTrunkFuel));
+                            showNotification(`Excess fuel stored in trunk: +${Math.round(excess)}`);
                         }
                     } else {
-                        gameState.car.trunkFuel = Math.min(gameState.car.trunkFuel + 10, gameState.car.maxTrunkFuel);
+                        gameState.car.trunkFuel = Math.round(Math.min(gameState.car.trunkFuel + 10, gameState.car.maxTrunkFuel));
                         showNotification('Fuel stored in trunk: +10');
                     }
                     point.active = false;
@@ -813,11 +822,11 @@
                         if (gameState.car.battery > gameState.car.maxBattery) {
                             const excess = gameState.car.battery - gameState.car.maxBattery;
                             gameState.car.battery = gameState.car.maxBattery;
-                            gameState.car.trunkBattery = Math.min(gameState.car.trunkBattery + excess, gameState.car.maxTrunkBattery);
-                            showNotification(`Excess circuits stored in trunk: +${excess}`);
+                            gameState.car.trunkBattery = Math.round(Math.min(gameState.car.trunkBattery + excess, gameState.car.maxTrunkBattery));
+                            showNotification(`Excess circuits stored in trunk: +${Math.round(excess)}`);
                         }
                     } else {
-                        gameState.car.trunkBattery = Math.min(gameState.car.trunkBattery + 10, gameState.car.maxTrunkBattery);
+                        gameState.car.trunkBattery = Math.round(Math.min(gameState.car.trunkBattery + 10, gameState.car.maxTrunkBattery));
                         showNotification('Circuits stored in trunk: +10');
                     }
                     point.active = false;
@@ -1444,7 +1453,7 @@
             }
 
             if (distanceElement) {
-                distanceElement.textContent = gameState.stats.totalDistance.toFixed(2);
+                distanceElement.textContent = Math.round(gameState.stats.totalDistance);
             }
 
             // Draw minimap
@@ -1551,7 +1560,7 @@
                 },
                 stats: {
                     totalTime: gameState.time.totalSeconds,
-                    totalDistance: gameState.stats.totalDistance
+                    totalDistance: Math.round(gameState.stats.totalDistance)
                 },
                 time: {
                     current: gameState.time.current
@@ -1585,19 +1594,19 @@
                 gameState.car.y = saveData.position.y;
                 gameState.car.rotation = saveData.position.rotation;
                 gameState.time.totalSeconds = saveData.stats.totalTime || 0;
-                gameState.stats.totalDistance = saveData.stats.totalDistance || 0;
+                gameState.stats.totalDistance = Math.round(saveData.stats.totalDistance || 0);
 
                 if (saveData.time) {
                     gameState.time.current = saveData.time.current;
                 }
 
                 if (saveData.car) {
-                    gameState.car.hp = saveData.car.hp ?? gameState.car.hp;
-                    gameState.car.fuel = saveData.car.fuel ?? gameState.car.fuel;
-                    gameState.car.battery = saveData.car.battery ?? gameState.car.battery;
-                    gameState.car.trunk = saveData.car.trunk ?? gameState.car.trunk;
-                    gameState.car.trunkFuel = saveData.car.trunkFuel ?? gameState.car.trunkFuel;
-                    gameState.car.trunkBattery = saveData.car.trunkBattery ?? gameState.car.trunkBattery;
+                    gameState.car.hp = Math.round(saveData.car.hp ?? gameState.car.hp);
+                    gameState.car.fuel = Math.round(saveData.car.fuel ?? gameState.car.fuel);
+                    gameState.car.battery = Math.round(saveData.car.battery ?? gameState.car.battery);
+                    gameState.car.trunk = Math.round(saveData.car.trunk ?? gameState.car.trunk);
+                    gameState.car.trunkFuel = Math.round(saveData.car.trunkFuel ?? gameState.car.trunkFuel);
+                    gameState.car.trunkBattery = Math.round(saveData.car.trunkBattery ?? gameState.car.trunkBattery);
                 }
 
                 if (saveData.world) {
@@ -1721,7 +1730,7 @@
             document.getElementById('gameOverTime').textContent =
                 `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             document.getElementById('gameOverDistance').textContent =
-                gameState.stats.totalDistance.toFixed(2);
+                Math.round(gameState.stats.totalDistance);
 
             // Show overlay
             document.getElementById('gameOverOverlay').style.display = 'block';

@@ -60,7 +60,7 @@ const carSystem = {
         const [wc, wa] = arrow(cur.mass, fnd.mass, true);
 
         const statLine = (label, val, col, sym) =>
-            '<p style="color:' + col + ';margin:4px 0">' + label + ': ' + Math.round(val * 100) + '% ' + sym + '</p>';
+            '<p style="color:' + col + ';margin:4px 0">' + label + ': ' + fontNumericHtml(Math.round(val * 100)) + '% ' + sym + '</p>';
 
         const panel = document.getElementById('carSwapContent');
         panel.innerHTML =
@@ -71,10 +71,10 @@ const carSystem = {
             '<h3 style="color:#888;margin:0 0 8px">CURRENT</h3>' +
             '<p style="color:' + curColor + ';font-size:14px;margin:4px 0">' + cur.name + '</p>' +
             '<p style="color:' + curColor + ';font-size:11px;margin:2px 0">' + cur.rarity + '</p>' +
-            '<p style="margin:4px 0">Speed: ' + Math.round(cur.speed * 100) + '%</p>' +
-            '<p style="margin:4px 0">Armor: ' + Math.round(cur.armor * 100) + '%</p>' +
-            '<p style="margin:4px 0">Handling: ' + Math.round(cur.steering * 100) + '%</p>' +
-            '<p style="margin:4px 0">Weight: ' + Math.round(cur.mass * 100) + '%</p>' +
+            '<p style="margin:4px 0">Speed: ' + fontNumericHtml(Math.round(cur.speed * 100)) + '%</p>' +
+            '<p style="margin:4px 0">Armor: ' + fontNumericHtml(Math.round(cur.armor * 100)) + '%</p>' +
+            '<p style="margin:4px 0">Handling: ' + fontNumericHtml(Math.round(cur.steering * 100)) + '%</p>' +
+            '<p style="margin:4px 0">Weight: ' + fontNumericHtml(Math.round(cur.mass * 100)) + '%</p>' +
             '</div>' +
             '<div style="display:flex;align-items:center;font-size:24px;color:#666">\u2192</div>' +
             '<div style="text-align:center">' +
@@ -88,9 +88,7 @@ const carSystem = {
             '</div>' +
             '</div>' +
             '<p style="margin-top:14px;color:#a33;font-size:11px">Swapping is permanent \u2014 your current vehicle will be lost.</p>' +
-            '<p style="margin-top:10px;color:#888;font-size:12px">' +
-            'Press <span style="color:#4f4">E</span> to Swap | Press <span style="color:#f44">Escape</span> to Keep' +
-            '</p>';
+            SWAP_MODAL_ACTIONS_HTML;
 
         this.overlayEl.style.display = 'flex';
     },
@@ -147,7 +145,7 @@ const carSystem = {
         overlay.id = 'carSwapOverlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
             'background:rgba(0,0,0,0.7);z-index:2500;display:none;' +
-            'align-items:center;justify-content:center;font-family:monospace;color:#ccc';
+            'align-items:center;justify-content:center;font-family:var(--font-ui),sans-serif;color:#ccc';
 
         const panel = document.createElement('div');
         panel.id = 'carSwapContent';
@@ -157,6 +155,7 @@ const carSystem = {
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
         this.overlayEl = overlay;
+        bindSwapModalOverlayClicks(overlay, this);
     },
 
     _bindKeys() {

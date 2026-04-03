@@ -6,8 +6,8 @@ const TEXTURES = [
     // { type: 'mud', src: 'dev_mud.png' },
     //{ type: 'water', src: 'dev_water.png' },
     //{ type: 'deepwater', src: 'dev_water_deep.png' },
-    { type: 'scrap', src: 'scrap.png' },
-    { type: 'circuit', src: 'circuit.png' },
+    { type: 'scrap', src: 'assets/icons/scrap.png' },
+    { type: 'circuit', src: 'assets/icons/circuits.png' },
     { type: 'car_sedan', src: 'assets/vehicles/car2.png' },
     { type: 'car_rusty_sedan', src: 'assets/vehicles/car-pink.png' },
     { type: 'car_police', src: 'assets/vehicles/car-police.png' },
@@ -20,8 +20,9 @@ const TEXTURES = [
     { type: 'tire', src: 'assets/icons/tire.png' },
     { type: 'exhaust', src: 'assets/icons/exhaust.png' },
     { type: 'radiator', src: 'assets/icons/radiator.png' },
-    { type: 'battery', src: 'assets/icons/battery.png' }
-    //{ type: 'barrel', src: 'barrel.png' }
+    { type: 'battery', src: 'assets/icons/battery.png' },
+    { type: 'container', src: 'assets/tiles/container.png' },
+    { type: 'barrel', src: 'assets/icons/fuel.png' }
 ];
 
 const RARITY_COLORS = {
@@ -66,8 +67,36 @@ const TERRAIN_COLORS = {
 
     garage: '#ccccff',
     collected: '#444444',
-    block: '#000000',
+    concrete: '#5e6256',
     water_tower: '#7a8ba3',
     container: '#b8522a',
     parking_lot: '#3d3d3d'
 };
+
+/** Wrap a value in markup so it uses `--font-numeric` (Ubuntu Mono). */
+function fontNumericHtml(value) {
+    return '<span class="font-numeric">' + String(value) + '</span>';
+}
+
+/** Swap confirmation modals (engine, tires, cars, exhaust, radiator, battery) */
+const SWAP_MODAL_ACTIONS_HTML =
+    '<div class="swap-modal-actions">' +
+    '<button type="button" class="swap-modal-btn swap-modal-btn-swap">Swap</button>' +
+    '<button type="button" class="swap-modal-btn swap-modal-btn-keep">Keep current</button>' +
+    '</div>' +
+    '<p class="swap-modal-keyboard-hint">Keyboard: E to swap · Esc to keep</p>';
+
+function bindSwapModalOverlayClicks(overlayEl, api) {
+    if (!overlayEl || overlayEl.dataset.swapModalBound) return;
+    overlayEl.dataset.swapModalBound = '1';
+    overlayEl.addEventListener('click', (e) => {
+        if (!api.pendingSwap) return;
+        const el = e.target instanceof Element ? e.target : e.target.parentElement;
+        const btn = el && el.closest('.swap-modal-btn-swap, .swap-modal-btn-keep');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.classList.contains('swap-modal-btn-swap')) api.acceptSwap();
+        else api.declineSwap();
+    });
+}
