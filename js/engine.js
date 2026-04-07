@@ -28,7 +28,10 @@ const engineSystem = {
     },
 
     getEngineForTile(tileX, tileY) {
-        let roll = hash2(tileX * 3.7, tileY * 7.3, 1100) * ENGINE_TOTAL_WEIGHT;
+        let roll = applyReputationPickupRoll(
+            hash2(tileX * 3.7, tileY * 7.3, 1100) * ENGINE_TOTAL_WEIGHT,
+            ENGINE_TOTAL_WEIGHT
+        );
         for (const engine of ENGINE_TYPES) {
             roll -= engine.weight;
             if (roll <= 0) return { ...engine };
@@ -100,6 +103,7 @@ const engineSystem = {
         if (typeof showNotification === 'function') {
             showNotification('Installed ' + this.current.name + '! (' + this.current.rarity + ')');
         }
+        if (typeof reputationSystem !== 'undefined') reputationSystem.addRep(2);
         this.hideSwapUI();
     },
 

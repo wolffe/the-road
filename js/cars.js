@@ -43,7 +43,10 @@ const carSystem = {
     },
 
     getCarForTile(tileX, tileY) {
-        let roll = hash2(tileX * 7.1, tileY * 13.3, 1300) * CAR_TOTAL_WEIGHT;
+        let roll = applyReputationPickupRoll(
+            hash2(tileX * 7.1, tileY * 13.3, 1300) * CAR_TOTAL_WEIGHT,
+            CAR_TOTAL_WEIGHT
+        );
         for (const car of CAR_TYPES) {
             roll -= car.weight;
             if (roll <= 0) return { ...car };
@@ -144,6 +147,7 @@ const carSystem = {
         if (typeof showNotification === 'function') {
             showNotification('Switched to ' + this.current.name + '! (' + this.current.rarity + ')');
         }
+        if (typeof reputationSystem !== 'undefined') reputationSystem.addRep(3);
         this.hideSwapUI();
     },
 

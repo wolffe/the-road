@@ -14,6 +14,14 @@ const worldChunks = new Map();
 // Skip spawning pickups / scattering trees on these tiles (structure art); not used for driving collision
 const BLOCKABLE_SPAWN_TERRAIN = new Set(['container', 'concrete', 'water_tower']);
 
+/** Ultra-rare red “portal” tiles near (not on) the highway; deterministic per seed. */
+const PORTAL_TILE_HASH_THRESHOLD = 0.000055;
+const PORTAL_MIN_ROAD_DIST = ROAD_HALF_WIDTH + 2;
+const PORTAL_MAX_ROAD_DIST = ROAD_HALF_WIDTH + 9;
+const PORTAL_EXCLUDE_TERRAIN = new Set([
+    'garage', 'concrete', 'parking_lot', 'water_tower', 'container', 'collected',
+]);
+
 // ===== Noise =====
 
 function fract(n) { return n - Math.floor(n); }
@@ -540,6 +548,21 @@ function generateChunk(cx, cy, collectedSet) {
                 });
                 occupiedByStructure.add(key);
             }
+        }
+    }
+
+    // Rare jam portal tiles: just off the road, never on road/mud/water or structure solids
+    for (let ly = 0; ly < CHUNK_SIZE; ly++) {
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            const tx = startTX + lx;
+            const ty = startTY + ly;
+            const rd = getRoadDistance(tx, ty);
+            if (rd < PORTAL_MIN_ROAD_DIST || rd > PORTAL_MAX_ROAD_DIST) continue;
+            const tt = terrain[ly * CHUNK_SIZE + lx];
+            if (tt === 'road' || tt === 'mud' || tt === 'water' || tt === 'deepwater') continue;
+            if (BLOCKABLE_SPAWN_TERRAIN.has(tt) || PORTAL_EXCLUDE_TERRAIN.has(tt)) continue;
+            if (hash2(tx, ty, 7777) >= PORTAL_TILE_HASH_THRESHOLD) continue;
+            terrain[ly * CHUNK_SIZE + lx] = 'portal';
         }
     }
 

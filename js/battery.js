@@ -28,7 +28,10 @@ const batterySystem = {
     },
 
     getBatteryForTile(tileX, tileY) {
-        let roll = hash2(tileX * 6.7, tileY * 3.2, 1600) * BATTERY_TOTAL_WEIGHT;
+        let roll = applyReputationPickupRoll(
+            hash2(tileX * 6.7, tileY * 3.2, 1600) * BATTERY_TOTAL_WEIGHT,
+            BATTERY_TOTAL_WEIGHT
+        );
         for (const bat of BATTERY_TYPES) {
             roll -= bat.weight;
             if (roll <= 0) return { ...bat };
@@ -87,6 +90,7 @@ const batterySystem = {
         }
         this._updateSidebar();
         if (typeof showNotification === 'function') showNotification('Installed ' + this.current.name + '!');
+        if (typeof reputationSystem !== 'undefined') reputationSystem.addRep(2);
         this.hideSwapUI();
     },
 

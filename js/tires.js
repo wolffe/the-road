@@ -28,7 +28,10 @@ const tireSystem = {
     },
 
     getTireForTile(tileX, tileY) {
-        let roll = hash2(tileX * 5.3, tileY * 11.7, 1200) * TIRE_TOTAL_WEIGHT;
+        let roll = applyReputationPickupRoll(
+            hash2(tileX * 5.3, tileY * 11.7, 1200) * TIRE_TOTAL_WEIGHT,
+            TIRE_TOTAL_WEIGHT
+        );
         for (const tire of TIRE_TYPES) {
             roll -= tire.weight;
             if (roll <= 0) return { ...tire };
@@ -100,6 +103,7 @@ const tireSystem = {
         if (typeof showNotification === 'function') {
             showNotification('Installed ' + this.current.name + '! (' + this.current.rarity + ')');
         }
+        if (typeof reputationSystem !== 'undefined') reputationSystem.addRep(2);
         this.hideSwapUI();
     },
 

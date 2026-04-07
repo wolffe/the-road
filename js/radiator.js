@@ -28,7 +28,10 @@ const radiatorSystem = {
     },
 
     getRadiatorForTile(tileX, tileY) {
-        let roll = hash2(tileX * 4.1, tileY * 8.9, 1500) * RADIATOR_TOTAL_WEIGHT;
+        let roll = applyReputationPickupRoll(
+            hash2(tileX * 4.1, tileY * 8.9, 1500) * RADIATOR_TOTAL_WEIGHT,
+            RADIATOR_TOTAL_WEIGHT
+        );
         for (const rad of RADIATOR_TYPES) {
             roll -= rad.weight;
             if (roll <= 0) return { ...rad };
@@ -87,6 +90,7 @@ const radiatorSystem = {
         }
         this._updateSidebar();
         if (typeof showNotification === 'function') showNotification('Installed ' + this.current.name + '!');
+        if (typeof reputationSystem !== 'undefined') reputationSystem.addRep(2);
         this.hideSwapUI();
     },
 

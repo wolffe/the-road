@@ -1,3 +1,9 @@
+# Hard Road
+
+**Pitch (one sentence):** Survive the endless procedural highway in a scavenger’s Lada—tow wrecks for scrap, trade up your engine and tires, and outrun empty fuel, dead batteries, and the wasteland weather.
+
+---
+
 https://pixabay.com/sound-effects/search/engine/
 https://www.soundsnap.com/search/audio?query=powerup
 

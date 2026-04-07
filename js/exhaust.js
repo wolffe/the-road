@@ -28,7 +28,10 @@ const exhaustSystem = {
     },
 
     getExhaustForTile(tileX, tileY) {
-        let roll = hash2(tileX * 2.9, tileY * 6.1, 1400) * EXHAUST_TOTAL_WEIGHT;
+        let roll = applyReputationPickupRoll(
+            hash2(tileX * 2.9, tileY * 6.1, 1400) * EXHAUST_TOTAL_WEIGHT,
+            EXHAUST_TOTAL_WEIGHT
+        );
         for (const ex of EXHAUST_TYPES) {
             roll -= ex.weight;
             if (roll <= 0) return { ...ex };
@@ -87,6 +90,7 @@ const exhaustSystem = {
         }
         this._updateSidebar();
         if (typeof showNotification === 'function') showNotification('Installed ' + this.current.name + '!');
+        if (typeof reputationSystem !== 'undefined') reputationSystem.addRep(2);
         this.hideSwapUI();
     },
 

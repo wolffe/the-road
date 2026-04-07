@@ -3,6 +3,7 @@
 
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="canonical" href="https://hardroad.xyz/">
 
     <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -20,6 +21,16 @@
         rel="stylesheet">
 
     <link rel="stylesheet" href="ui.css" type="text/css">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V3RPB3HHCD"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'G-V3RPB3HHCD');
+    </script>
 </head>
 
 <body>
@@ -98,6 +109,8 @@
 
             <div class="stat">Lights: <span id="lightsStatus">ON</span></div>
             <div class="stat">Towing: <span id="towingStatus">No</span></div>
+            <div class="stat" id="towDeliveryHint" style="display:none"></div>
+            <div class="stat"><small class="muted">Reputation</small><br><span id="reputationText">Stranger (0 rep)</span></div>
 
             <div class="panel-section">
                 <h3>Save Game</h3>
@@ -159,6 +172,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tone@15.3.5/build/Tone.js"></script>
     <script src="js/pickup-tone.js?1"></script>
     <script src="js/world.js?1"></script>
+    <script src="js/reputation.js?1"></script>
     <script src="js/engine.js?1"></script>
     <script src="js/tires.js?1"></script>
     <script src="js/cars.js?1"></script>
@@ -166,6 +180,8 @@
     <script src="js/exhaust.js?1"></script>
     <script src="js/radiator.js?1"></script>
     <script src="js/battery.js?1"></script>
+    <script src="js/tow_delivery.js?1"></script>
+    <script src="js/weather.js?1"></script>
     <script src="js/particles.js?1"></script>
     <script src="js/audio.js?1"></script>
 
@@ -200,6 +216,64 @@
         const CAR_DRAG_COASTING = 0.018;
         /** Only while towing; normal driving has no artificial top speed cap. */
         const TOW_SPEED_CAP = 3 * 0.8;
+
+        // -----------------------------------------------------------------
+        // ATMOSPHERE (roadmap: fog, wasteland grade, terrain wear, ambient BGM)
+        // Quick off: set the *_ENABLED flags to false, or delete this whole
+        // section through "end ATMOSPHERE". Ambient music: leave URL empty
+        // until you add a file under assets/audio/.
+        // -----------------------------------------------------------------
+        const ATMOSPHERE_FOG_ENABLED = true;
+        const ATMOSPHERE_COLOR_GRADE_ENABLED = true;
+        const ATMOSPHERE_TERRAIN_OVERLAY_ENABLED = true;
+        /** Example when ready: 'assets/audio/ambient-loop.mp3' */
+        const ATMOSPHERE_AMBIENT_MUSIC_URL = '';
+
+        let atmosphereAmbientAudio = null;
+        let atmosphereAmbientStarted = false;
+
+        function tryStartAtmosphereAmbientMusic() {
+            if (atmosphereAmbientStarted || !ATMOSPHERE_AMBIENT_MUSIC_URL) return;
+            atmosphereAmbientStarted = true;
+            try {
+                atmosphereAmbientAudio = new Audio(ATMOSPHERE_AMBIENT_MUSIC_URL);
+                atmosphereAmbientAudio.loop = true;
+                atmosphereAmbientAudio.volume = 0.35;
+                atmosphereAmbientAudio.play().catch(function () { /* autoplay blocked until gesture */ });
+            } catch (e) { /* ignore */ }
+        }
+
+        function bindAtmosphereAmbientOnFirstGesture() {
+            const go = function () { tryStartAtmosphereAmbientMusic(); };
+            window.addEventListener('click', go, { once: true });
+            window.addEventListener('keydown', go, { once: true });
+            window.addEventListener('touchstart', go, { once: true, passive: true });
+        }
+
+        /** Wasteland haze; weaker at night. Uses daylight 0–1 from game loop. */
+        function drawAtmosphereFog(daylight) {
+            if (!ATMOSPHERE_FOG_ENABLED) return;
+            const d = Math.max(0.12, Math.min(1, daylight));
+            const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            g.addColorStop(0, 'rgba(105, 96, 82, ' + (0.06 * d) + ')');
+            g.addColorStop(1, 'rgba(72, 66, 58, ' + (0.17 * d) + ')');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        /** Warm dusty multiply (HTA-style). Before night dim so blacks don’t crush as hard. */
+        function drawAtmosphereColorGrade() {
+            if (!ATMOSPHERE_COLOR_GRADE_ENABLED) return;
+            ctx.save();
+            ctx.globalCompositeOperation = 'multiply';
+            ctx.fillStyle = 'rgb(218, 200, 180)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        }
+        // ------------------------- end ATMOSPHERE -------------------------
+
+        // Procedural SFX: Tone.js is already on the page (pickup-tone). When you
+        // have sounds, add thin wrappers here — e.g. horn / engine grunt — not wired yet.
 
         function tireTrackMaxAge(trackType) {
             if (trackType === 'road') return 900;
@@ -342,7 +416,20 @@
                 towedCar: null,
                 ropeLength: 60,
             },
+            /** Throttle jam portal `window.open` so driving over the tile does not spam tabs. */
+            _lastJamPortalOpenMs: 0,
         };
+
+        const JAM_PORTAL_URL = 'https://jam.pieter.com/portal/2026?ref=hardroad.xyz';
+        const JAM_PORTAL_OPEN_COOLDOWN_MS = 90000;
+
+        function tryOpenJamPortal() {
+            const now = Date.now();
+            if (now - gameState._lastJamPortalOpenMs < JAM_PORTAL_OPEN_COOLDOWN_MS) return;
+            gameState._lastJamPortalOpenMs = now;
+            window.open(JAM_PORTAL_URL, '_blank', 'noopener,noreferrer');
+            showNotification('Jam portal — opened in a new tab');
+        }
 
         bindTouchDrivingButton(document.getElementById('touchLeft'), 'ArrowLeft');
         bindTouchDrivingButton(document.getElementById('touchRight'), 'ArrowRight');
@@ -408,6 +495,7 @@
                     tow.active = false;
                     tow.targetEntity = null;
                     tow.towedCar = null;
+                    if (typeof towDeliverySystem !== 'undefined') towDeliverySystem.onTowDetached();
                     showNotification('Released');
                 } else {
                     // Try to attach: find nearby abandoned car
@@ -442,6 +530,7 @@
                             tileX: best.tileX,
                             tileY: best.tileY,
                         };
+                        if (typeof towDeliverySystem !== 'undefined') towDeliverySystem.onTowAttached();
                         showNotification('Towing!');
                     }
                 }
@@ -717,6 +806,18 @@
             // Tire grip reduces terrain penalty
             if (terrainSpeedMultiplier < 1) {
                 terrainSpeedMultiplier = Math.max(0.1, 1 - (1 - terrainSpeedMultiplier) / tireSystem.current.grip);
+            }
+
+            if (typeof weatherSystem !== 'undefined') {
+                terrainSpeedMultiplier *= weatherSystem.getTerrainSpeedFactor(carTerrainType);
+            }
+
+            if (carTerrainType === 'portal') {
+                tryOpenJamPortal();
+            }
+
+            if (typeof towDeliverySystem !== 'undefined') {
+                towDeliverySystem.update();
             }
 
             // Apply physics with terrain effects
@@ -1212,10 +1313,11 @@
             const tailInset = Math.max(0.8, dim * 0.055);
             const headY = -length * 0.5 + headInset;
             const tailY = length * 0.5 - tailInset;
-            const beamSide = Math.max(32, dim * 1.15);
-            const beamFarY = Math.max(50, dim * 2.0);
-            const beamMidY = Math.max(38, dim * 1.55);
-            const beamSpread = Math.max(42, dim * 1.65);
+            // Headlight cones: forward reach scales with length (matches old ~120 / 100 / 80 px for length≈40).
+            const beamFarY = Math.max(95, length * 2.95);
+            const beamMidY = Math.max(58, length * 1.5);
+            const beamSpread = Math.max(72, length * 2.0);
+            const beamSide = Math.max(58, width * 0.5 + length * 1.75);
             const glowOuter = Math.max(4, dim * 0.19);
             const glowMid = Math.max(3, dim * 0.14);
             const glowCore = Math.max(1.6, dim * 0.068);
@@ -1417,6 +1519,9 @@
         function gameLoop(timestamp) {
             // Update time
             updateTime();
+            if (typeof weatherSystem !== 'undefined') {
+                weatherSystem.update(1 / 60);
+            }
 
             // Clear canvas first
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1495,11 +1600,18 @@
             drawTowRope();
             drawCar();
 
+            drawAtmosphereFog(daylight);
+            drawAtmosphereColorGrade();
+
             // Apply darkness overlay
             ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             drawCarLights();
+
+            if (typeof weatherSystem !== 'undefined') {
+                weatherSystem.draw(ctx, canvas.width, canvas.height);
+            }
 
             // Update car physics
             updateCar();
@@ -1600,6 +1712,12 @@
                         ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
                     }
 
+                    if (terrainType === 'portal') {
+                        const pulse = 0.5 + 0.5 * Math.sin(waterAnimTime * 3.2);
+                        ctx.fillStyle = 'rgba(255, 80, 80, ' + (0.12 + pulse * 0.18) + ')';
+                        ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
+                    }
+
                     if (terrainType === 'grass' || terrainType === 'highgrass') {
                         const h = (Math.abs((tx * 73 + ty * 137) ^ (gameState.world.seed * 31)) % 1000) / 1000;
                         if (h > 0.94) {
@@ -1613,6 +1731,21 @@
                     const noise = ((tx * 73 + ty * 137) & 255) / 255;
                     ctx.fillStyle = `rgba(0,0,0,${noise * 0.08})`;
                     ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
+
+                    // ATMOSPHERE: rare wear / stain (roadmap). Set ATMOSPHERE_TERRAIN_OVERLAY_ENABLED false to drop.
+                    if (ATMOSPHERE_TERRAIN_OVERLAY_ENABLED && terrainType !== 'water' && terrainType !== 'deepwater') {
+                        const seed = gameState.world.seed | 0;
+                        const h1 = ((tx * 311 + ty * 419 + seed * 17) >>> 0) % 1000 / 1000;
+                        if (h1 > 0.93) {
+                            ctx.fillStyle = 'rgba(35, 30, 24, ' + (0.05 + h1 * 0.1) + ')';
+                            ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
+                        }
+                        const h2 = ((tx * 127 + ty * 503 + seed * 9) >>> 0) % 1000 / 1000;
+                        if (h2 > 0.965) {
+                            ctx.fillStyle = 'rgba(55, 48, 38, ' + (0.04 + h2 * 0.06) + ')';
+                            ctx.fillRect(screenX - ts / 2 + 2, screenY - ts / 2 + 2, ts - 4, ts - 4);
+                        }
+                    }
                 }
             }
         }
@@ -1648,7 +1781,10 @@
                 car: carSystem.getSaveData(),
                 exhaust: exhaustSystem.getSaveData(),
                 radiator: radiatorSystem.getSaveData(),
-                battery: batterySystem.getSaveData()
+                battery: batterySystem.getSaveData(),
+                reputation: typeof reputationSystem !== 'undefined' ? reputationSystem.getSaveData() : null,
+                weather: typeof weatherSystem !== 'undefined' ? weatherSystem.getSaveData() : null,
+                towDelivery: typeof towDeliverySystem !== 'undefined' ? towDeliverySystem.getSaveData() : null,
             };
             localStorage.setItem('carGameSave', JSON.stringify(saveData));
         }
@@ -1699,6 +1835,15 @@
                 if (saveData.battery) {
                     batterySystem.loadSaveData(saveData.battery);
                 }
+                if (saveData.reputation && typeof reputationSystem !== 'undefined') {
+                    reputationSystem.loadSaveData(saveData.reputation);
+                }
+                if (saveData.weather && typeof weatherSystem !== 'undefined') {
+                    weatherSystem.loadSaveData(saveData.weather);
+                }
+                if (saveData.towDelivery && typeof towDeliverySystem !== 'undefined') {
+                    towDeliverySystem.loadSaveData(saveData.towDelivery);
+                }
 
                 return true;
             }
@@ -1724,6 +1869,9 @@
             exhaustSystem.init();
             radiatorSystem.init();
             batterySystem.init();
+            if (typeof reputationSystem !== 'undefined') reputationSystem.init();
+            if (typeof weatherSystem !== 'undefined') weatherSystem.init();
+            if (typeof towDeliverySystem !== 'undefined') towDeliverySystem.init();
             loadGame();
             carSystem.applyVehicleQueryParam();
             generateTerrain();
@@ -1733,6 +1881,7 @@
 
             document.getElementById('loadingOverlay').style.display = 'none';
             requestAnimationFrame(() => resizeCanvas());
+            bindAtmosphereAmbientOnFirstGesture();
         };
 
         // Update loadImages function
@@ -1848,6 +1997,9 @@
             exhaustSystem.reset();
             radiatorSystem.reset();
             batterySystem.reset();
+            if (typeof reputationSystem !== 'undefined') reputationSystem.reset();
+            if (typeof weatherSystem !== 'undefined') weatherSystem.reset();
+            if (typeof towDeliverySystem !== 'undefined') towDeliverySystem.reset();
 
             document.getElementById('gameOverOverlay').style.display = 'none';
 
@@ -1855,6 +2007,8 @@
             generateTerrain();
         }
     </script>
+
+    <script async src="https://jam.pieter.com/2026/widget.js"></script>
 </body>
 
 </html>

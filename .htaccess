@@ -1,0 +1,34 @@
+# =============================================================================
+# Hard Road — canonical URL: https://hardroad.xyz/
+# Remove or edit this file if you change hosts or use non-Apache (e.g. nginx).
+#
+# Behind Cloudflare / a reverse proxy, if %{HTTPS} is wrong, you may need:
+#   RewriteCond %{HTTP:X-Forwarded-Proto} !https
+# instead of (or in addition to) the HTTPS check — ask your host.
+# =============================================================================
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # --- 1) HTTPS first (avoids hitting https://www… before cert is valid) ---
+    RewriteCond %{HTTPS} !=on
+    RewriteRule ^ https://hardroad.xyz%{REQUEST_URI} [L,R=301,QSA]
+
+    # --- 2) Apex only: strip www (and any other hostname) ---
+    RewriteCond %{HTTP_HOST} !^hardroad\.xyz$ [NC]
+    RewriteRule ^ https://hardroad.xyz%{REQUEST_URI} [L,R=301,QSA]
+
+    # --- 3) Trailing slash: non-file, non-real-dir paths get a trailing /
+    # Skips .js, .png, .html, etc. Adjust if you add extensionless routes.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} !/$
+    RewriteRule ^(.+)$ https://hardroad.xyz/$1/ [L,R=301,QSA]
+</IfModule>
+
+# Optional: tighten caching for static assets (tune types as needed)
+# <IfModule mod_headers.c>
+#     <FilesMatch "\.(js|css|png|jpg|jpeg|gif|webp|svg|ico|woff2?|mp3|ogg|wav)$">
+#         Header set Cache-Control "public, max-age=86400"
+#     </FilesMatch>
+# </IfModule>

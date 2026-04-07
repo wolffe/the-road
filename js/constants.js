@@ -75,7 +75,9 @@ const TERRAIN_COLORS = {
     concrete: '#6a6d64',
     water_tower: '#7a8b9a',
     container: '#8b4a28',
-    parking_lot: '#454545'
+    parking_lot: '#454545',
+    /** Jam portal — ultra-rare; opens jam link when driven over (see index.html). */
+    portal: '#c41e1e',
 };
 
 const TERRAIN_DISPLAY_NAMES = {
@@ -96,6 +98,7 @@ const TERRAIN_DISPLAY_NAMES = {
     container: 'Container',
     parking_lot: 'Parking',
     collected: 'Collected',
+    portal: 'Portal',
 };
 
 
