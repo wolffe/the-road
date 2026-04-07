@@ -8,7 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.ico">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <meta name="apple-mobile-web-app-title" content="The Road">
+    <meta name="apple-mobile-web-app-title" content="Hard Road">
     <link rel="manifest" href="site.webmanifest">
 
     <script src="https://unpkg.com/akar-icons-fonts"></script>
@@ -82,7 +82,7 @@
             <details>
                 <summary>Car Configuration</summary>
                 <div class="stat">Terrain: <span id="terrainText">grass</span></div>
-                <div class="stat">Car: <span id="carText">Standard Sedan</span></div>
+                <div class="stat">Car: <span id="carText">Lada / VAZ</span></div>
                 <div class="stat">Engine: <span id="engineText">Stock 4-Cylinder</span></div>
                 <div class="stat">Tires: <span id="tireText">Standard Tires</span></div>
                 <div class="stat">Exhaust: <span id="exhaustText">Stock Exhaust</span></div>
@@ -139,7 +139,7 @@
     <div id="mobileRotateHint" class="mobile-rotate-hint">Best in portrait — rotate your device</div>
 
     <div id="loadingOverlay">
-        Loading...
+        Loading Hard Road...
     </div>
 
     <!-- Add Game Over overlay -->
@@ -155,18 +155,19 @@
         </div>
     </div>
 
-    <script src="constants.js?1"></script>
+    <script src="js/constants.js?1"></script>
     <script src="https://cdn.jsdelivr.net/npm/tone@15.3.5/build/Tone.js"></script>
-    <script src="pickup-tone.js"></script>
-    <script src="world.js"></script>
-    <script src="engine.js"></script>
-    <script src="tires.js"></script>
-    <script src="cars.js"></script>
-    <script src="exhaust.js"></script>
-    <script src="radiator.js"></script>
-    <script src="battery.js"></script>
-    <script src="particles.js"></script>
-    <script src="audio.js"></script>
+    <script src="js/pickup-tone.js?1"></script>
+    <script src="js/world.js?1"></script>
+    <script src="js/engine.js?1"></script>
+    <script src="js/tires.js?1"></script>
+    <script src="js/cars.js?1"></script>
+    <script src="js/vehicles_draw.js?1"></script>
+    <script src="js/exhaust.js?1"></script>
+    <script src="js/radiator.js?1"></script>
+    <script src="js/battery.js?1"></script>
+    <script src="js/particles.js?1"></script>
+    <script src="js/audio.js?1"></script>
 
     <script>
         const canvas = document.createElement('canvas');
@@ -190,12 +191,31 @@
         const CAR_BRAKE_RAMP = (1 / (60 * 5)) * CAR_ACCEL_TUNE;
         /** When you release gas/brake, pedal falls so the next press ramps again. */
         const CAR_PEDAL_DECAY = 0.06;
+        /** Extra throttle ramp at higher |speed| so lifting gas then re-applying doesn’t feel like starting from 0. */
+        const CAR_THROTTLE_RAMP_SPEED_MUL = 5;
+        const CAR_THROTTLE_RAMP_SPEED_MUL_CAP = 18;
         /** Per-frame linear drag while on throttle/brake (same as original 0.05 — keeps full-throttle top speed). */
         const CAR_DRAG_DRIVING = 0.05;
         /** Lighter drag when coasting (no gas/brake) — car rolls longer after lifting off the accelerator. */
         const CAR_DRAG_COASTING = 0.018;
         /** Only while towing; normal driving has no artificial top speed cap. */
         const TOW_SPEED_CAP = 3 * 0.8;
+
+        function tireTrackMaxAge(trackType) {
+            if (trackType === 'road') return 900;
+            if (trackType === 'mud' || trackType === 'badlands' || trackType === 'wasteland' || trackType === 'sands') return 600;
+            return 300;
+        }
+
+        /** Chassis top speed × engine × tires × exhaust (game units; HUD uses ×50 ≈ km/h). */
+        function getEffectiveTopSpeed() {
+            const base = carSystem?.current?.topSpeed;
+            const b = base != null && base > 0 ? base : 2;
+            const e = engineSystem?.current?.power ?? 1;
+            const t = tireSystem?.current?.speed ?? 1;
+            const x = exhaustSystem?.current?.power ?? 1;
+            return Math.max(0.12, b * e * t * x);
+        }
 
         function isMobileLayout() {
             return window.innerWidth <= MOBILE_MAX_WIDTH;
@@ -415,7 +435,13 @@
                     if (best) {
                         tow.active = true;
                         tow.targetEntity = best;
-                        tow.towedCar = { x: best.x, y: best.y, rotation: car.rotation };
+                        tow.towedCar = {
+                            x: best.x,
+                            y: best.y,
+                            rotation: car.rotation,
+                            tileX: best.tileX,
+                            tileY: best.tileY,
+                        };
                         showNotification('Towing!');
                     }
                 }
@@ -565,7 +591,9 @@
                 gameState.car.throttlePedal = 0;
                 gameState.car.brakePedal = 0;
             } else if (keyUp) {
-                gameState.car.throttlePedal = Math.min(1, gameState.car.throttlePedal + CAR_THROTTLE_RAMP);
+                const spd = Math.abs(gameState.car.speed);
+                const rampMul = 1 + Math.min(CAR_THROTTLE_RAMP_SPEED_MUL_CAP, spd * CAR_THROTTLE_RAMP_SPEED_MUL);
+                gameState.car.throttlePedal = Math.min(1, gameState.car.throttlePedal + CAR_THROTTLE_RAMP * rampMul);
                 gameState.car.brakePedal = Math.max(0, gameState.car.brakePedal - CAR_PEDAL_DECAY);
                 gameState.car.acceleration = CAR_DRIVE_ACCEL * gameState.car.throttlePedal *
                     engineSystem.current.power * tireSystem.current.speed * carSystem.current.speed * exhaustSystem.current.power;
@@ -668,8 +696,15 @@
             let terrainSpeedMultiplier = 1;
             switch (carTerrainType) {
                 case 'mud':
-                case 'snow':
+                case 'badlands':
+                case 'wasteland':
                     terrainSpeedMultiplier = 0.5;
+                    break;
+                case 'sands':
+                    terrainSpeedMultiplier = 0.65;
+                    break;
+                case 'mesa':
+                    terrainSpeedMultiplier = 0.72;
                     break;
                 case 'water':
                     terrainSpeedMultiplier = 0.8;
@@ -689,8 +724,12 @@
             const dragK = Math.abs(gameState.car.acceleration) > 1e-8 ? CAR_DRAG_DRIVING : CAR_DRAG_COASTING;
             gameState.car.speed *= 1 - (dragK / vehicleMass);
 
-            if (gameState.towing.active && Math.abs(gameState.car.speed) > TOW_SPEED_CAP) {
-                gameState.car.speed = Math.sign(gameState.car.speed) * TOW_SPEED_CAP;
+            let speedCap = getEffectiveTopSpeed();
+            if (gameState.towing.active) {
+                speedCap = Math.min(speedCap, TOW_SPEED_CAP);
+            }
+            if (Math.abs(gameState.car.speed) > speedCap) {
+                gameState.car.speed = Math.sign(gameState.car.speed) * speedCap;
             }
 
             // Add tire tracks for appropriate terrain
@@ -698,8 +737,11 @@
                 carTerrainType === 'grass' ||
                 carTerrainType === 'highgrass' ||
                 carTerrainType === 'hill' ||
+                carTerrainType === 'mesa' ||
                 carTerrainType === 'mud' ||
-                carTerrainType === 'snow' ||
+                carTerrainType === 'badlands' ||
+                carTerrainType === 'wasteland' ||
+                carTerrainType === 'sands' ||
                 carTerrainType === 'road'
             )) {
                 const tireOffset = gameState.car.width * 0.4;
@@ -718,8 +760,7 @@
                 gameState.tireTrackHistory.push({
                     left: { ...leftTire },
                     right: { ...rightTire },
-                    age: carTerrainType === 'road' ? 900 :
-                        carTerrainType === 'mud' || carTerrainType === 'snow' ? 600 : 300,
+                    age: tireTrackMaxAge(carTerrainType),
                     type: carTerrainType
                 });
             }
@@ -803,7 +844,7 @@
             document.getElementById('speedText').textContent = Math.abs(Math.round(gameState.car.speed * 50));
             document.getElementById('posX').textContent = Math.round(gameState.car.x);
             document.getElementById('posY').textContent = Math.round(gameState.car.y);
-            document.getElementById('terrainText').textContent = carTerrainType;
+            document.getElementById('terrainText').textContent = TERRAIN_DISPLAY_NAMES[carTerrainType] || carTerrainType;
             document.getElementById('towingStatus').textContent = gameState.towing.active ? 'Yes' : 'No';
             document.getElementById('trunkText').textContent = Math.round(gameState.car.trunk);
             document.getElementById('maxTrunkText').textContent = Math.round(gameState.car.maxTrunk);
@@ -991,49 +1032,14 @@
 
             const width = gameState.car.width;
             const length = gameState.car.length;
-
-            const spriteKey = carSystem?.current?.sprite;
-
-            if (spriteKey && images[spriteKey]?.complete) {
-                ctx.drawImage(images[spriteKey], -width / 2, -length / 2, width, length);
-            } else {
-                const bodyColor = carSystem?.current?.color || '#ff0000';
-                const roofWidth = width * 0.7;
-                const roofLength = length * 0.5;
-
-                ctx.beginPath();
-                ctx.moveTo(-width / 2, length / 2);
-                ctx.lineTo(width / 2, length / 2);
-                ctx.lineTo(width / 2, -length / 2);
-                ctx.lineTo(-width / 2, -length / 2);
-                ctx.closePath();
-                ctx.fillStyle = bodyColor;
-                ctx.fill();
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.beginPath();
-                ctx.moveTo(-roofWidth / 2, length / 4);
-                ctx.lineTo(roofWidth / 2, length / 4);
-                ctx.lineTo(roofWidth / 2, -length / 4);
-                ctx.lineTo(-roofWidth / 2, -length / 4);
-                ctx.closePath();
-                ctx.fillStyle = bodyColor;
-                ctx.fill();
-                ctx.fillStyle = 'rgba(0,0,0,0.15)';
-                ctx.fill();
-                ctx.strokeStyle = '#000';
-                ctx.stroke();
-
-                // Draw windows
-                ctx.fillStyle = '#333';
-                ctx.fillRect(-roofWidth / 2 - 1, 0, roofWidth + 2, 2);
-
-                // Draw bumpers
-                ctx.fillStyle = '#888';
-                ctx.fillRect(-width / 2, -length / 2, width, 4);
-                ctx.fillRect(-width / 2, length / 2 - 4, width, 4);
+            const cur = carSystem?.current;
+            if (typeof drawProceduralVehicle === 'function' && cur) {
+                drawProceduralVehicle(ctx, {
+                    id: cur.id,
+                    width: width,
+                    length: length,
+                    color: cur.color,
+                });
             }
 
             ctx.restore();
@@ -1054,7 +1060,18 @@
                 const drawScale = ENTITY_ICON_MAP_TYPES.has(ent.type) ? ENTITY_ICON_ON_MAP_SCALE : 1;
                 const half = ent.size * 0.5 * drawScale;
 
-                if (images[ent.type]?.complete) {
+                if (ent.type === 'vehicle' && typeof drawProceduralVehicle === 'function' && typeof carSystem !== 'undefined') {
+                    const ghost = carSystem.getCarForTile(ent.tileX, ent.tileY);
+                    ctx.save();
+                    ctx.translate(sx, sy);
+                    drawProceduralVehicle(ctx, {
+                        id: ghost.id,
+                        width: ghost.width,
+                        length: ghost.length,
+                        color: ghost.color,
+                    });
+                    ctx.restore();
+                } else if (images[ent.type]?.complete) {
                     ctx.drawImage(images[ent.type], sx - half, sy - half, half * 2, half * 2);
                 } else {
                     const color = ENTITY_FALLBACK_COLORS[ent.type] || '#888';
@@ -1099,22 +1116,16 @@
 
                 ctx.save();
                 ctx.translate(sx, sy);
-
-                const w = 20;
-                const l = 34;
-                // Body
-                ctx.fillStyle = '#4488aa';
-                ctx.fillRect(-w / 2, -l / 2, w, l);
-                ctx.strokeStyle = '#336677';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(-w / 2, -l / 2, w, l);
-                // Roof
-                ctx.fillStyle = '#3a7799';
-                ctx.fillRect(-w * 0.35, -l * 0.25, w * 0.7, l * 0.5);
-                // Rust spots
-                ctx.fillStyle = 'rgba(139, 69, 19, 0.4)';
-                ctx.fillRect(-w * 0.3, -l * 0.3, 6, 4);
-                ctx.fillRect(w * 0.1, l * 0.15, 5, 3);
+                if (typeof drawProceduralVehicle === 'function' && typeof carSystem !== 'undefined') {
+                    const ghost = carSystem.getCarForTile(ent.tileX, ent.tileY);
+                    drawProceduralVehicle(ctx, {
+                        id: ghost.id,
+                        width: ghost.width,
+                        length: ghost.length,
+                        color: ghost.color,
+                        abandoned: true,
+                    });
+                }
 
                 ctx.restore();
             }
@@ -1133,18 +1144,17 @@
             ctx.translate(sx, sy);
             ctx.rotate(tc.rotation);
 
-            const w = 20;
-            const l = 34;
-            ctx.fillStyle = '#4488aa';
-            ctx.fillRect(-w / 2, -l / 2, w, l);
-            ctx.strokeStyle = '#336677';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(-w / 2, -l / 2, w, l);
-            ctx.fillStyle = '#3a7799';
-            ctx.fillRect(-w * 0.35, -l * 0.25, w * 0.7, l * 0.5);
-            ctx.fillStyle = 'rgba(139, 69, 19, 0.4)';
-            ctx.fillRect(-w * 0.3, -l * 0.3, 6, 4);
-            ctx.fillRect(w * 0.1, l * 0.15, 5, 3);
+            if (typeof drawProceduralVehicle === 'function' && typeof carSystem !== 'undefined' &&
+                tc.tileX != null && tc.tileY != null) {
+                const ghost = carSystem.getCarForTile(tc.tileX, tc.tileY);
+                drawProceduralVehicle(ctx, {
+                    id: ghost.id,
+                    width: ghost.width,
+                    length: ghost.length,
+                    color: ghost.color,
+                    abandoned: true,
+                });
+            }
 
             ctx.restore();
         }
@@ -1161,9 +1171,13 @@
             const rearX = car.x - Math.sin(car.rotation) * (car.length / 2);
             const rearY = car.y + Math.cos(car.rotation) * (car.length / 2);
 
-            // Front of towed car
-            const frontX = tc.x + Math.sin(tc.rotation) * 17;
-            const frontY = tc.y - Math.cos(tc.rotation) * 17;
+            let towFront = 17;
+            if (typeof carSystem !== 'undefined' && tow.targetEntity) {
+                const g = carSystem.getCarForTile(tow.targetEntity.tileX, tow.targetEntity.tileY);
+                towFront = g.length * 0.42;
+            }
+            const frontX = tc.x + Math.sin(tc.rotation) * towFront;
+            const frontY = tc.y - Math.cos(tc.rotation) * towFront;
 
             ctx.save();
             ctx.setLineDash([6, 4]);
@@ -1192,6 +1206,19 @@
 
             const width = gameState.car.width;
             const length = gameState.car.length;
+            const dim = Math.min(width, length);
+            const headXOff = width * 0.25;
+            const headInset = Math.max(0.8, dim * 0.055);
+            const tailInset = Math.max(0.8, dim * 0.055);
+            const headY = -length * 0.5 + headInset;
+            const tailY = length * 0.5 - tailInset;
+            const beamSide = Math.max(32, dim * 1.15);
+            const beamFarY = Math.max(50, dim * 2.0);
+            const beamMidY = Math.max(38, dim * 1.55);
+            const beamSpread = Math.max(42, dim * 1.65);
+            const glowOuter = Math.max(4, dim * 0.19);
+            const glowMid = Math.max(3, dim * 0.14);
+            const glowCore = Math.max(1.6, dim * 0.068);
 
             // Calculate light intensity based on time
             const timeOfDay = gameState.time.current * 24;
@@ -1212,64 +1239,59 @@
 
                 // Outermost glow (widest and faintest)
                 ctx.beginPath();
-                ctx.moveTo(-width / 4, -length / 2);
-                ctx.lineTo(-width / 2 - 70, -length / 2 - 120);
-                ctx.lineTo(width / 2 + 70, -length / 2 - 120);
-                ctx.lineTo(width / 4, -length / 2);
+                ctx.moveTo(-headXOff, headY);
+                ctx.lineTo(-width * 0.5 - beamSide, headY - beamFarY);
+                ctx.lineTo(width * 0.5 + beamSide, headY - beamFarY);
+                ctx.lineTo(headXOff, headY);
                 ctx.fillStyle = `rgba(255, 255, 200, ${0.025 * headlightIntensity})`;
                 ctx.fill();
 
                 // Create gradient for the main beam
                 const gradient = ctx.createRadialGradient(
-                    0, -length / 2,  // Start at car front center
-                    0,               // Start radius
-                    0, -length / 2 - 60,  // End at beam middle
-                    80              // End radius
+                    0, headY, 0,
+                    0, headY - beamMidY,
+                    beamSpread
                 );
                 gradient.addColorStop(0, `rgba(255, 255, 220, ${0.5 * headlightIntensity})`);
                 gradient.addColorStop(1, `rgba(255, 255, 220, 0)`);
 
                 // Middle glow with gradient
                 ctx.beginPath();
-                ctx.moveTo(-width / 4, -length / 2);
-                ctx.lineTo(-width / 2 - 50, -length / 2 - 100);
-                ctx.lineTo(width / 2 + 50, -length / 2 - 100);
-                ctx.lineTo(width / 4, -length / 2);
+                ctx.moveTo(-headXOff, headY);
+                ctx.lineTo(-width * 0.5 - beamSide * 0.72, headY - beamFarY * 0.82);
+                ctx.lineTo(width * 0.5 + beamSide * 0.72, headY - beamFarY * 0.82);
+                ctx.lineTo(headXOff, headY);
                 ctx.fillStyle = gradient;
                 ctx.fill();
 
                 // Headlight dots with enhanced glow
-                // Outer glow
                 const leftHeadlightGlow = ctx.createRadialGradient(
-                    -width / 4, -length / 2 + 2, 0,
-                    -width / 4, -length / 2 + 2, 8
+                    -headXOff, headY, 0,
+                    -headXOff, headY, glowOuter
                 );
                 leftHeadlightGlow.addColorStop(0, `rgba(255, 255, 150, ${0.9 * headlightIntensity})`);
                 leftHeadlightGlow.addColorStop(1, `rgba(255, 255, 150, 0)`);
 
                 const rightHeadlightGlow = ctx.createRadialGradient(
-                    width / 4, -length / 2 + 2, 0,
-                    width / 4, -length / 2 + 2, 8
+                    headXOff, headY, 0,
+                    headXOff, headY, glowOuter
                 );
                 rightHeadlightGlow.addColorStop(0, `rgba(255, 255, 150, ${0.9 * headlightIntensity})`);
                 rightHeadlightGlow.addColorStop(1, `rgba(255, 255, 150, 0)`);
 
-                // Left headlight glow
                 ctx.beginPath();
-                ctx.arc(-width / 4, -length / 2 + 2, 8, 0, Math.PI * 2);
+                ctx.arc(-headXOff, headY, glowOuter, 0, Math.PI * 2);
                 ctx.fillStyle = leftHeadlightGlow;
                 ctx.fill();
 
-                // Right headlight glow
                 ctx.beginPath();
-                ctx.arc(width / 4, -length / 2 + 2, 8, 0, Math.PI * 2);
+                ctx.arc(headXOff, headY, glowOuter, 0, Math.PI * 2);
                 ctx.fillStyle = rightHeadlightGlow;
                 ctx.fill();
 
-                // Inner bright dots
                 ctx.beginPath();
-                ctx.arc(-width / 4, -length / 2 + 2, 3, 0, Math.PI * 2);
-                ctx.arc(width / 4, -length / 2 + 2, 3, 0, Math.PI * 2);
+                ctx.arc(-headXOff, headY, glowCore, 0, Math.PI * 2);
+                ctx.arc(headXOff, headY, glowCore, 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(255, 255, 0, ${headlightIntensity})`;
                 ctx.fill();
 
@@ -1283,41 +1305,35 @@
 
             if (isBraking) {
                 ctx.globalCompositeOperation = 'screen';
-                // Outer glow for brake lights
                 ctx.beginPath();
-                ctx.arc(-width / 4, length / 2 - 2, 8, 0, Math.PI * 2);
-                ctx.arc(width / 4, length / 2 - 2, 8, 0, Math.PI * 2);
+                ctx.arc(-headXOff, tailY, glowOuter, 0, Math.PI * 2);
+                ctx.arc(headXOff, tailY, glowOuter, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 50, 50, 0.3)";
                 ctx.fill();
 
-                // Middle glow
                 ctx.beginPath();
-                ctx.arc(-width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
-                ctx.arc(width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
+                ctx.arc(-headXOff, tailY, glowMid, 0, Math.PI * 2);
+                ctx.arc(headXOff, tailY, glowMid, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 50, 50, 0.5)";
                 ctx.fill();
 
                 ctx.globalCompositeOperation = 'lighter';
-                // Bright center
                 ctx.beginPath();
-                ctx.arc(-width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
-                ctx.arc(width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
+                ctx.arc(-headXOff, tailY, glowCore, 0, Math.PI * 2);
+                ctx.arc(headXOff, tailY, glowCore, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 50, 50, 1.0)";
                 ctx.fill();
             } else {
                 ctx.globalCompositeOperation = 'screen';
-                // Regular taillights with glow
-                // Outer glow
                 ctx.beginPath();
-                ctx.arc(-width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
-                ctx.arc(width / 4, length / 2 - 2, 6, 0, Math.PI * 2);
+                ctx.arc(-headXOff, tailY, glowMid, 0, Math.PI * 2);
+                ctx.arc(headXOff, tailY, glowMid, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 50, 50, 0.3)";
                 ctx.fill();
 
-                // Inner light
                 ctx.beginPath();
-                ctx.arc(-width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
-                ctx.arc(width / 4, length / 2 - 2, 3, 0, Math.PI * 2);
+                ctx.arc(-headXOff, tailY, glowCore, 0, Math.PI * 2);
+                ctx.arc(headXOff, tailY, glowCore, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 50, 50, 0.7)";
                 ctx.fill();
             }
@@ -1439,8 +1455,7 @@
 
             // Draw tire tracks
             gameState.tireTrackHistory.forEach(track => {
-                const opacity = track.age / (track.type === 'road' ? 900 :
-                    track.type === 'mud' || track.type === 'snow' ? 600 : 300);
+                const opacity = track.age / tireTrackMaxAge(track.type);
 
                 // Use neutral dark gray for all terrain types
                 ctx.fillStyle = `rgba(40, 40, 40, ${opacity * 0.7})`; // Darker gray with increased opacity
@@ -1585,7 +1600,7 @@
                         ctx.fillRect(screenX - ts / 2, screenY - ts / 2, ts, ts);
                     }
 
-                    if (terrainType === 'grass') {
+                    if (terrainType === 'grass' || terrainType === 'highgrass') {
                         const h = (Math.abs((tx * 73 + ty * 137) ^ (gameState.world.seed * 31)) % 1000) / 1000;
                         if (h > 0.94) {
                             const overlay = h > 0.97 ? 'grass_2' : 'grass_1';
@@ -1616,7 +1631,7 @@
                 time: {
                     current: gameState.time.current
                 },
-                car: {
+                vehicle: {
                     hp: gameState.car.hp,
                     fuel: gameState.car.fuel,
                     battery: gameState.car.battery,
@@ -1651,13 +1666,14 @@
                     gameState.time.current = saveData.time.current;
                 }
 
-                if (saveData.car) {
-                    gameState.car.hp = Math.round(saveData.car.hp ?? gameState.car.hp);
-                    gameState.car.fuel = Math.round(saveData.car.fuel ?? gameState.car.fuel);
-                    gameState.car.battery = Math.round(saveData.car.battery ?? gameState.car.battery);
-                    gameState.car.trunk = Math.round(saveData.car.trunk ?? gameState.car.trunk);
-                    gameState.car.trunkFuel = Math.round(saveData.car.trunkFuel ?? gameState.car.trunkFuel);
-                    gameState.car.trunkBattery = Math.round(saveData.car.trunkBattery ?? gameState.car.trunkBattery);
+                const vehicleStats = saveData.vehicle || saveData.car;
+                if (vehicleStats && vehicleStats.hp != null) {
+                    gameState.car.hp = Math.round(vehicleStats.hp ?? gameState.car.hp);
+                    gameState.car.fuel = Math.round(vehicleStats.fuel ?? gameState.car.fuel);
+                    gameState.car.battery = Math.round(vehicleStats.battery ?? gameState.car.battery);
+                    gameState.car.trunk = Math.round(vehicleStats.trunk ?? gameState.car.trunk);
+                    gameState.car.trunkFuel = Math.round(vehicleStats.trunkFuel ?? gameState.car.trunkFuel);
+                    gameState.car.trunkBattery = Math.round(vehicleStats.trunkBattery ?? gameState.car.trunkBattery);
                 }
 
                 if (saveData.world) {
@@ -1671,7 +1687,7 @@
                 if (saveData.tires) {
                     tireSystem.loadSaveData(saveData.tires);
                 }
-                if (saveData.car) {
+                if (saveData.car && saveData.car.carId) {
                     carSystem.loadSaveData(saveData.car);
                 }
                 if (saveData.exhaust) {
@@ -1709,6 +1725,7 @@
             radiatorSystem.init();
             batterySystem.init();
             loadGame();
+            carSystem.applyVehicleQueryParam();
             generateTerrain();
 
             gameState.viewport.x = gameState.car.x - canvas.width / 2;
@@ -1827,6 +1844,7 @@
             engineSystem.reset();
             tireSystem.reset();
             carSystem.reset();
+            carSystem.applyVehicleQueryParam();
             exhaustSystem.reset();
             radiatorSystem.reset();
             batterySystem.reset();

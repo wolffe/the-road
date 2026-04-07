@@ -54,7 +54,7 @@ Ways to make tileable grass/snow/mud feel less repetitive:
 
 ## How structures are stored
 
-Structures are defined in **`world.js`** in the **`STRUCTURE_TEMPLATES`** array. They are **not** stored in JSON or image files; each entry is a JavaScript object.
+Structures are defined in **`js/world.js`** in the **`STRUCTURE_TEMPLATES`** array. They are **not** stored in JSON or image files; each entry is a JavaScript object.
 
 ### One structure = one template object
 
@@ -73,7 +73,7 @@ Each template has:
 
 Structures are **not** saved to a separate structure list. Placement is **deterministic and computed on demand**:
 
-1. **When** a chunk is generated, `generateChunk()` in `world.js` runs.
+1. **When** a chunk is generated, `generateChunk()` in `js/world.js` runs.
 2. **Where** structures can appear: every **`STRUCTURE_SPACING`** tiles along the road (e.g. 50). For each “segment” in range of the chunk, `getStructurePlacement(segmentIndex)` is called.
 3. **Which** structure: a deterministic 1D noise value (from the world seed) picks a template by weight. Same seed ⇒ same structure at the same segment.
 4. **Side of road**: left or right alternates by segment (`segmentIndex % 2`).
@@ -84,14 +84,14 @@ So: **storage = the `STRUCTURE_TEMPLATES` array only.** Runtime “storage” is
 
 ### Adding a new structure
 
-1. Add a new object to **`STRUCTURE_TEMPLATES`** in `world.js` with `name`, `weight`, `width`, `height`, `tiles`, and `entities`.
-2. Ensure `TERRAIN_COLORS` (in `constants.js`) has entries for any terrain types you use in `tiles` (e.g. `garage`, `block`).
+1. Add a new object to **`STRUCTURE_TEMPLATES`** in `js/world.js` with `name`, `weight`, `width`, `height`, `tiles`, and `entities`.
+2. Ensure `TERRAIN_COLORS` (in `js/constants.js`) has entries for any terrain types you use in `tiles` (e.g. `garage`, `block`).
 3. If you add a new entity `type`, wire it in `index.html` (collection logic, `ENTITY_FALLBACK_COLORS`, and any special behaviour).
-4. Adjust **`STRUCTURE_SPACING`** in `world.js` if you want structures more or less frequent globally.
+4. Adjust **`STRUCTURE_SPACING`** in `js/world.js` if you want structures more or less frequent globally.
 
 ### Trees and rocks (procedural scatter)
 
-In **`generateChunk()`** in `world.js`, after structures are stamped:
+In **`generateChunk()`** in `js/world.js`, after structures are stamped:
 
 - **Trees** are placed only on **`grass`** and **`highgrass`** tiles (green fields). Each such tile has a small deterministic chance (hash > 0.95) to get a tree.
 - **Rocks** are placed only on **`hill`** and **`rock`** tiles. Same idea, different hash threshold (0.97).

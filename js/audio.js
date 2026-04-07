@@ -7,6 +7,7 @@ const SOUNDS = {
         loop: true,
         volume: 0.4
     },
+    /*
     splash: {
         src: 'sounds/splash.ogg',
         volume: 0.3
@@ -15,6 +16,7 @@ const SOUNDS = {
         src: 'sounds/impact.ogg',
         volume: 0.5
     },
+    /**/
     drift: {
         src: 'sounds/tire-squeal.mp3',
         volume: 0.3

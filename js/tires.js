@@ -1,10 +1,10 @@
 const TIRE_TYPES = [
     { id: 'worn', name: 'Worn Tires', rarity: 'Common', weight: 30, speed: 0.85, grip: 0.7 },
     { id: 'standard', name: 'Standard Tires', rarity: 'Common', weight: 25, speed: 1.0, grip: 1.0 },
-    { id: 'sport', name: 'Sport Tires', rarity: 'Uncommon', weight: 20, speed: 1.15, grip: 0.9 },
+    { id: 'sport', name: 'Sport Tires', rarity: 'Uncommon', weight: 20, speed: 1.08, grip: 0.9 },
     { id: 'offroad', name: 'Off-Road Tires', rarity: 'Rare', weight: 13, speed: 0.95, grip: 1.4 },
-    { id: 'racing', name: 'Racing Slicks', rarity: 'Very Rare', weight: 8, speed: 1.3, grip: 0.75 },
-    { id: 'rally', name: 'Rally Tires', rarity: 'Legendary', weight: 4, speed: 1.2, grip: 1.3 },
+    { id: 'racing', name: 'Racing Slicks', rarity: 'Very Rare', weight: 8, speed: 1.12, grip: 0.75 },
+    { id: 'rally', name: 'Rally Tires', rarity: 'Legendary', weight: 4, speed: 1.08, grip: 1.3 },
 ];
 
 const TIRE_TOTAL_WEIGHT = TIRE_TYPES.reduce((s, t) => s + t.weight, 0);

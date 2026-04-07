@@ -3,8 +3,8 @@ const ENGINE_TYPES = [
     { id: 'stock_4cyl', name: 'Stock 4-Cylinder', rarity: 'Common', weight: 25, power: 1.0, fuelRate: 1.0 },
     { id: 'tuned_4cyl', name: 'Tuned 4-Cylinder', rarity: 'Uncommon', weight: 20, power: 1.2, fuelRate: 1.1 },
     { id: 'v6', name: 'V6 Engine', rarity: 'Rare', weight: 13, power: 1.4, fuelRate: 1.25 },
-    { id: 'v8', name: 'V8 Engine', rarity: 'Very Rare', weight: 8, power: 1.65, fuelRate: 1.4 },
-    { id: 'turbo_v8', name: 'Turbo V8', rarity: 'Legendary', weight: 4, power: 2.0, fuelRate: 1.6 },
+    { id: 'v8', name: 'V8 Engine', rarity: 'Very Rare', weight: 8, power: 1.5, fuelRate: 1.4 },
+    { id: 'turbo_v8', name: 'Turbo V8', rarity: 'Legendary', weight: 4, power: 1.72, fuelRate: 1.6 },
 ];
 
 const ENGINE_TOTAL_WEIGHT = ENGINE_TYPES.reduce((s, e) => s + e.weight, 0);

@@ -3,8 +3,8 @@ const EXHAUST_TYPES = [
     { id: 'stock', name: 'Stock Exhaust', rarity: 'Common', weight: 25, power: 1.0 },
     { id: 'sport', name: 'Sport Exhaust', rarity: 'Uncommon', weight: 20, power: 1.1 },
     { id: 'performance', name: 'Performance Exhaust', rarity: 'Rare', weight: 13, power: 1.2 },
-    { id: 'racing', name: 'Racing Exhaust', rarity: 'Very Rare', weight: 8, power: 1.3 },
-    { id: 'turbo_back', name: 'Turbo-Back System', rarity: 'Legendary', weight: 4, power: 1.4 },
+    { id: 'racing', name: 'Racing Exhaust', rarity: 'Very Rare', weight: 8, power: 1.2 },
+    { id: 'turbo_back', name: 'Turbo-Back System', rarity: 'Legendary', weight: 4, power: 1.22 },
 ];
 
 const EXHAUST_TOTAL_WEIGHT = EXHAUST_TYPES.reduce((s, e) => s + e.weight, 0);

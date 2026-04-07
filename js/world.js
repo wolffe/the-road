@@ -2,7 +2,7 @@ const TILE_SIZE = 80;
 const CHUNK_SIZE = 32;
 const ROAD_HALF_WIDTH = 2;
 /** Average tile gap along the road between structure anchor points (larger = farther apart). */
-const STRUCTURE_SPACING = 100;
+const STRUCTURE_SPACING = 20;
 /** Random offset along Y per segment, as multiple of STRUCTURE_SPACING (4 → ±2× spacing). */
 const STRUCTURE_JITTER_IN_SPACING = 4;
 const CHUNK_LOAD_RADIUS = 3;
@@ -69,36 +69,43 @@ function getProceduralTerrainType(tileX, tileY) {
 
     const elevation = noise2D(tileX * 0.015, tileY * 0.015, 300);
     const moisture = noise2D(tileX * 0.01, tileY * 0.01, 400);
-    /** Lower coefficient = slower change along the road = larger biome bands (was 0.0008). */
-    const biome = noise1D(tileY * 0.0004, 500);
+    /** Higher coefficient = shorter biome runs along the road (less “days” in one tone). */
+    const biome = noise1D(tileY * 0.001, 500);
+    /** Fine-scale variation so arid bands still get grass pockets and oases. */
+    const patch = noise2D(tileX * 0.035, tileY * 0.035, 550);
 
-    if (biome < 0.3) {
-        if (elevation > 0.7) return 'rock';
-        if (elevation > 0.4) return 'snow';
-        if (moisture > 0.85) return 'deepwater';
-        return moisture > 0.7 ? 'water' : 'snow';
-    } else if (biome < 0.65) {
-        if (elevation > 0.8) return 'rock';
-        if (elevation > 0.6) return 'hill';
-        if (moisture > 0.85) return 'deepwater';
-        if (moisture > 0.75) return 'water';
-        if (moisture > 0.55) return 'highgrass';
-        return 'grass';
-    } else {
-        if (elevation > 0.75) return 'rock';
-        if (moisture > 0.92) return 'deepwater';
-        if (moisture > 0.85) return 'water';
-        if (elevation > 0.5) return 'hill';
-        return moisture > 0.4 ? 'grass' : 'mud';
+    if (biome < 0.24) {
+        if (elevation > 0.74) return 'mesa';
+        if (elevation > 0.36) return 'badlands';
+        if (moisture > 0.84) return 'deepwater';
+        if (moisture > 0.68) return 'water';
+        if (moisture > 0.5 || patch > 0.58) return 'highgrass';
+        if (moisture > 0.38 || patch > 0.42) return 'grass';
+        return 'wasteland';
     }
+    if (biome < 0.58) {
+        if (elevation > 0.86) return 'mesa';
+        if (elevation > 0.66) return 'hill';
+        if (moisture > 0.84) return 'deepwater';
+        if (moisture > 0.73) return 'water';
+        if (moisture > 0.46) return 'highgrass';
+        return 'grass';
+    }
+    if (elevation > 0.8) return 'mesa';
+    if (moisture > 0.9) return 'deepwater';
+    if (moisture > 0.83) return 'water';
+    if (elevation > 0.58) return 'hill';
+    if (moisture < 0.2) return 'sands';
+    if (moisture > 0.34 || patch > 0.38) return 'grass';
+    return moisture > 0.26 ? 'mud' : 'sands';
 }
 
 // ===== Structures =====
 
 const STRUCTURE_TEMPLATES = [
     {
-        name: 'Gas Station',
-        weight: 0.4,
+        name: 'Service Station',
+        weight: 0.11,
         width: 5, height: 4,
         tiles: [
             ['garage', 'garage', 'garage', 'road', 'road'],
@@ -112,11 +119,12 @@ const STRUCTURE_TEMPLATES = [
             { rx: 0, ry: 2, type: 'scrap' },
             { rx: 4, ry: 0, type: 'tire' },
             { rx: 1, ry: 0, type: 'radiator' },
+            { rx: 2, ry: 3, type: 'vehicle' },
         ]
     },
     {
-        name: 'Diner',
-        weight: 0.3,
+        name: 'Roadside Cafe',
+        weight: 0.1,
         width: 5, height: 4,
         tiles: [
             ['concrete', 'concrete', 'concrete', 'road', 'road'],
@@ -134,7 +142,7 @@ const STRUCTURE_TEMPLATES = [
     },
     {
         name: 'Scrapyard',
-        weight: 0.3,
+        weight: 0.13,
         width: 6, height: 5,
         tiles: [
             ['mud', 'mud', 'mud', 'mud', 'road', 'road'],
@@ -155,7 +163,7 @@ const STRUCTURE_TEMPLATES = [
     },
     {
         name: 'Water Tower',
-        weight: 0.25,
+        weight: 0.09,
         width: 4, height: 5,
         tiles: [
             ['road', 'water_tower', 'water_tower', 'road'],
@@ -171,7 +179,7 @@ const STRUCTURE_TEMPLATES = [
     },
     {
         name: 'Container Yard',
-        weight: 0.25,
+        weight: 0.1,
         width: 6, height: 5,
         tiles: [
             ['container', 'container', 'road', 'road', 'container', 'container'],
@@ -189,7 +197,7 @@ const STRUCTURE_TEMPLATES = [
     },
     {
         name: 'Derelict Parking Lot',
-        weight: 0.25,
+        weight: 0.08,
         width: 6, height: 4,
         tiles: [
             ['concrete', 'parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road'],
@@ -201,6 +209,185 @@ const STRUCTURE_TEMPLATES = [
             { rx: 1, ry: 0, type: 'scrap' },
             { rx: 3, ry: 1, type: 'abandoned_car' },
             { rx: 4, ry: 2, type: 'circuit' },
+            { rx: 2, ry: 1, type: 'vehicle' },
+        ]
+    },
+    {
+        name: 'Car Scrapyard',
+        weight: 0.045,
+        width: 8, height: 5,
+        tiles: [
+            ['mud', 'mud', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 0, ry: 0, type: 'abandoned_car' },
+            { rx: 1, ry: 0, type: 'abandoned_car' },
+            { rx: 2, ry: 0, type: 'abandoned_car' },
+            { rx: 0, ry: 1, type: 'abandoned_car' },
+            { rx: 2, ry: 1, type: 'abandoned_car' },
+            { rx: 1, ry: 2, type: 'abandoned_car' },
+            { rx: 3, ry: 2, type: 'engine_block' },
+            { rx: 0, ry: 3, type: 'tire' },
+            { rx: 2, ry: 3, type: 'exhaust' },
+        ]
+    },
+    {
+        name: 'Small Village',
+        weight: 0.16,
+        width: 8, height: 5,
+        tiles: [
+            ['garage', 'mud', 'garage', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'concrete', 'concrete', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'concrete', 'concrete', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 0, ry: 0, type: 'barrel' },
+            { rx: 2, ry: 0, type: 'scrap' },
+            { rx: 0, ry: 2, type: 'scrap' },
+            { rx: 3, ry: 2, type: 'barrel' },
+            { rx: 6, ry: 2, type: 'circuit' },
+            { rx: 1, ry: 3, type: 'battery' },
+        ]
+    },
+    {
+        name: 'Workshop',
+        weight: 0.14,
+        width: 5, height: 4,
+        tiles: [
+            ['garage', 'garage', 'garage', 'road', 'road'],
+            ['garage', 'garage', 'garage', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 0, ry: 2, type: 'scrap' },
+            { rx: 2, ry: 2, type: 'engine_block' },
+            { rx: 3, ry: 0, type: 'tire' },
+            { rx: 4, ry: 2, type: 'barrel' },
+        ]
+    },
+    {
+        name: 'Abandoned Gas Station',
+        weight: 0.11,
+        width: 5, height: 4,
+        tiles: [
+            ['concrete', 'concrete', 'concrete', 'road', 'road'],
+            ['concrete', 'concrete', 'concrete', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 0, ry: 2, type: 'barrel' },
+            { rx: 2, ry: 2, type: 'scrap' },
+            { rx: 4, ry: 2, type: 'barrel' },
+            { rx: 3, ry: 0, type: 'circuit' },
+            { rx: 2, ry: 3, type: 'vehicle' },
+        ]
+    },
+    {
+        name: 'Trading Post',
+        weight: 0.15,
+        width: 6, height: 4,
+        tiles: [
+            ['mud', 'mud', 'mud', 'road', 'road', 'road'],
+            ['mud', 'garage', 'mud', 'road', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 0, ry: 0, type: 'scrap' },
+            { rx: 2, ry: 0, type: 'circuit' },
+            { rx: 0, ry: 1, type: 'battery' },
+            { rx: 2, ry: 2, type: 'barrel' },
+            { rx: 0, ry: 2, type: 'scrap' },
+            { rx: 4, ry: 1, type: 'circuit' },
+        ]
+    },
+    {
+        name: 'City Ruins',
+        weight: 0.16,
+        width: 8, height: 6,
+        tiles: [
+            ['container', 'container', 'parking_lot', 'parking_lot', 'road', 'road', 'road', 'road'],
+            ['container', 'container', 'parking_lot', 'parking_lot', 'road', 'road', 'road', 'road'],
+            ['parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road', 'road', 'road', 'road'],
+            ['parking_lot', 'parking_lot', 'parking_lot', 'parking_lot', 'road', 'road', 'road', 'road'],
+            ['parking_lot', 'mud', 'mud', 'parking_lot', 'road', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 2, ry: 0, type: 'scrap' },
+            { rx: 3, ry: 2, type: 'scrap' },
+            { rx: 1, ry: 3, type: 'abandoned_car' },
+            { rx: 3, ry: 3, type: 'circuit' },
+            { rx: 0, ry: 4, type: 'barrel' },
+            { rx: 6, ry: 4, type: 'scrap' },
+        ]
+    },
+    {
+        name: 'Loading Dock',
+        weight: 0.13,
+        width: 8, height: 5,
+        tiles: [
+            ['container', 'container', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['container', 'container', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['container', 'container', 'concrete', 'concrete', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'parking_lot', 'parking_lot', 'road', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 3, ry: 0, type: 'scrap' },
+            { rx: 2, ry: 0, type: 'circuit' },
+            { rx: 0, ry: 3, type: 'barrel' },
+            { rx: 2, ry: 3, type: 'scrap' },
+            { rx: 3, ry: 3, type: 'scrap' },
+            { rx: 6, ry: 4, type: 'vehicle' },
+        ]
+    },
+    {
+        name: 'Railway Station',
+        weight: 0.12,
+        width: 9, height: 4,
+        tiles: [
+            ['concrete', 'concrete', 'concrete', 'concrete', 'concrete', 'road', 'road', 'road', 'road'],
+            ['concrete', 'concrete', 'concrete', 'concrete', 'concrete', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'mud', 'mud', 'mud', 'road', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 5, ry: 0, type: 'scrap' },
+            { rx: 7, ry: 0, type: 'barrel' },
+            { rx: 2, ry: 2, type: 'scrap' },
+            { rx: 0, ry: 2, type: 'circuit' },
+            { rx: 7, ry: 2, type: 'battery' },
+        ]
+    },
+    {
+        name: 'Abandoned Factory',
+        weight: 0.15,
+        width: 9, height: 6,
+        tiles: [
+            ['concrete', 'concrete', 'concrete', 'container', 'container', 'road', 'road', 'road', 'road'],
+            ['concrete', 'concrete', 'concrete', 'container', 'container', 'road', 'road', 'road', 'road'],
+            ['container', 'concrete', 'concrete', 'concrete', 'mud', 'road', 'road', 'road', 'road'],
+            ['container', 'concrete', 'concrete', 'concrete', 'mud', 'road', 'road', 'road', 'road'],
+            ['mud', 'mud', 'concrete', 'concrete', 'concrete', 'road', 'road', 'road', 'road'],
+            ['road', 'road', 'road', 'road', 'road', 'road', 'road', 'road', 'road'],
+        ],
+        entities: [
+            { rx: 6, ry: 2, type: 'circuit' },
+            { rx: 0, ry: 4, type: 'engine_block' },
+            { rx: 1, ry: 4, type: 'radiator' },
+            { rx: 7, ry: 4, type: 'scrap' },
+            { rx: 4, ry: 2, type: 'exhaust' },
+            { rx: 5, ry: 0, type: 'scrap' },
+            { rx: 4, ry: 5, type: 'vehicle' },
         ]
     },
 ];
@@ -346,7 +533,7 @@ function generateChunk(cx, cy, collectedSet) {
                     tileX: tx, tileY: ty, size: TILE_SIZE, active: true
                 });
                 occupiedByStructure.add(key);
-            } else if ((tt === 'hill' || tt === 'rock') && hash2(tx * 0.7, ty * 0.7, 900) > 0.97) {
+            } else if ((tt === 'hill' || tt === 'mesa') && hash2(tx * 0.7, ty * 0.7, 900) > 0.97) {
                 entities.push({
                     type: 'rock', x: tx * TILE_SIZE, y: ty * TILE_SIZE,
                     tileX: tx, tileY: ty, size: TILE_SIZE, active: true

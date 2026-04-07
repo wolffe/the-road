@@ -9,13 +9,13 @@ alwaysApply: true
 
 - HTML + vanilla JavaScript (no frameworks, no bundlers, no npm runtime)
 - Single `index.html` with inline `<script>` for game logic
-- Separate JS files: `constants.js`, `world.js`, `particles.js`, `audio.js`
+- Separate JS files in `js/`: `constants.js`, `world.js`, `particles.js`, `audio.js`, etc.
 - CSS in `ui.css`
 - Procedurally generated infinite world with a single highway road
 
 ## Architecture
 
-### World system (`world.js`)
+### World system (`js/world.js`)
 
 The world is procedurally generated using seeded noise. A single highway road winds gently through biomes (temperate, cold, arid). Terrain is generated in 32x32-tile chunks loaded/unloaded around the player.
 
@@ -36,7 +36,7 @@ Interactive entities are stored in `gameState.entities` (a `Map` keyed by `"tile
 
 - World center is `(0, 0)`, car starts there on the road
 - Tile `(tx, ty)` center is at world position `(tx * 80, ty * 80)`
-- `TILE_SIZE = 80` world units per tile (defined in `world.js`)
+- `TILE_SIZE = 80` world units per tile (defined in `js/world.js`)
 
 ### Key helper functions (global scope in index.html)
 
@@ -47,13 +47,13 @@ Interactive entities are stored in `gameState.entities` (a `Map` keyed by `"tile
 
 ## Adding new terrain types
 
-1. Add a display color in `constants.js` → `TERRAIN_COLORS`
-2. Add generation logic in `world.js` → `getProceduralTerrainType()`
+1. Add a display color in `js/constants.js` → `TERRAIN_COLORS`
+2. Add generation logic in `js/world.js` → `getProceduralTerrainType()`
 3. If interactive (collectible/obstacle), add the type to `ENTITY_TYPES` in `index.html`
 
 ## Adding new structures
 
-1. Add a template to `STRUCTURE_TEMPLATES` in `world.js` with tile layout and entity spawns
+1. Add a template to `STRUCTURE_TEMPLATES` in `js/world.js` with tile layout and entity spawns
 2. Multiple variants per type are supported — just add more entries with the same weight distribution
 
 ## Files
@@ -61,10 +61,10 @@ Interactive entities are stored in `gameState.entities` (a `Map` keyed by `"tile
 | File | Purpose |
 |------|---------|
 | `index.html` | Main game (canvas, game loop, physics, UI) |
-| `world.js` | Procedural world generation (noise, road, chunks, structures) |
-| `constants.js` | Terrain colors, texture configs |
-| `particles.js` | Exhaust, handbrake smoke, fire, water splash particles |
-| `audio.js` | Sound manager using HTMLAudioElement |
+| `js/world.js` | Procedural world generation (noise, road, chunks, structures) |
+| `js/constants.js` | Terrain colors, texture configs |
+| `js/particles.js` | Exhaust, handbrake smoke, fire, water splash particles |
+| `js/audio.js` | Sound manager using HTMLAudioElement |
 | `ui.css` | Sidebar, status bars, minimap styling |
 | `tools/editor-map-colors.php` | Standalone color replacement tool for map PNGs |
 

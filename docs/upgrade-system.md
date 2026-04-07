@@ -22,18 +22,18 @@ Each upgrade system has:
 | Very Rare | 8      | ~8%      | Purple |
 | Legendary | 4      | ~4%      | Gold   |
 
-Rarity colors are defined in `constants.js` as `RARITY_COLORS`.
+Rarity colors are defined in `js/constants.js` as `RARITY_COLORS`.
 
 ### Files per upgrade type
 
 | Upgrade | Logic file  | Entity type    | Spawns at    | Texture      |
 |---------|-------------|----------------|--------------|--------------|
-| Engine  | `engine.js` | `engine_block` | Scrapyard    | `engine.png` |
-| Tires   | `tires.js`  | `tire`         | Gas Station  | `tire.png`   |
+| Engine  | `js/engine.js` | `engine_block` | Scrapyard    | `engine.png` |
+| Tires   | `js/tires.js`  | `tire`         | Gas Station  | `tire.png`   |
 
 ### Integration points in `index.html`
 
-- `<script>` tag (after `world.js`, before `particles.js`)
+- `<script>` tag (after `js/world.js`, before `js/particles.js`)
 - Sidebar stat element (`<span id="...Text">`)
 - Controls section: multiply acceleration by the system's stat
 - Terrain modifier: apply grip/resistance if applicable
@@ -43,9 +43,9 @@ Rarity colors are defined in `constants.js` as `RARITY_COLORS`.
 
 ## How to Add a New Upgrade Type
 
-### 1. Create the logic file (e.g. `radiator.js`)
+### 1. Create the logic file (e.g. `js/radiator.js`)
 
-Copy `engine.js` and change:
+Copy `js/engine.js` and change:
 
 - `ENGINE_TYPES` → your type array with appropriate stats (e.g. `heatResist`, `coolRate`)
 - `engineSystem` → `radiatorSystem`
@@ -58,13 +58,13 @@ Copy `engine.js` and change:
 - Notification messages
 - Save/load key names (`radiatorId` instead of `engineId`)
 
-### 2. Add texture to `constants.js`
+### 2. Add texture to `js/constants.js`
 
 ```js
 { type: 'radiator', src: 'radiator.png' },
 ```
 
-### 3. Add entity spawn to `world.js`
+### 3. Add entity spawn to `js/world.js`
 
 Add to a structure template's `entities` array:
 
@@ -74,7 +74,7 @@ Add to a structure template's `entities` array:
 
 ### 4. Wire into `index.html`
 
-- Script tag: `<script src="radiator.js"></script>`
+- Script tag: `<script src="js/radiator.js"></script>`
 - Sidebar: `<div class="stat">Radiator: <span id="radiatorText">Standard Radiator</span></div>`
 - Entity fallback color: `radiator: '#cc6644',`
 - Controls: multiply relevant physics by `radiatorSystem.current.somestat`
