@@ -2,6 +2,10 @@
 <html>
 
 <head>
+    <meta charset="utf-8">
+    <title>Hard Road — endless highway survival</title>
+    <meta name="description"
+        content="Survive a procedural wasteland highway in your car: scavenge scrap and upgrades, tow wrecks for rewards, manage fuel and battery, and keep rolling. Play free in the browser at hardroad.xyz.">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <link rel="canonical" href="https://hardroad.xyz/">
 
@@ -44,6 +48,12 @@
                 <span class="mobile-panel-toggle-label">Stats</span>
                 <span class="mobile-panel-toggle-icon" aria-hidden="true">▲</span>
             </button>
+
+            <p class="panel-icon-bar">
+                <a href="https://x.com/cipriangb" target="_blank"><i class="ai-x-fill"></i></a>
+                <a href="https://getbutterfly.com" target="_blank"><i class="ai-link-chain"></i></a>
+            </p>
+
             <div id="minimapContainer">
                 <canvas id="minimap"></canvas>
             </div>
@@ -110,7 +120,8 @@
             <div class="stat">Lights: <span id="lightsStatus">ON</span></div>
             <div class="stat">Towing: <span id="towingStatus">No</span></div>
             <div class="stat" id="towDeliveryHint" style="display:none"></div>
-            <div class="stat"><small class="muted">Reputation</small><br><span id="reputationText">Stranger (0 rep)</span></div>
+            <div class="stat"><small class="muted">Reputation</small><br><span id="reputationText">Stranger (0
+                    rep)</span></div>
 
             <div class="panel-section">
                 <h3>Save Game</h3>
@@ -123,7 +134,7 @@
             </div>
 
             <div>
-                <small class="muted">Game Version</small> <span class="font-numeric">0.0.1-alpha</span>
+                <small class="muted">Game Version</small> <span class="font-numeric">0.1.0</span>
                 <br>
                 <a href="https://getbutterfly.com">getButterfly.com</a>
             </div>
@@ -153,6 +164,36 @@
 
     <div id="loadingOverlay">
         Loading Hard Road...
+    </div>
+
+    <div id="howToPlayOverlay" class="how-to-play-overlay" role="dialog" aria-modal="true"
+        aria-labelledby="howToPlayTitle" hidden>
+        <div class="how-to-play-dialog">
+            <h2 id="howToPlayTitle" class="how-to-play-title">How to play</h2>
+            <div class="how-to-play-body">
+                <p><strong>Goal:</strong> Stay alive on the endless road. If you run out of <strong>fuel</strong> or
+                    <strong>battery</strong>, or your <strong>HP</strong> hits zero, it is game over. The sidebar shows
+                    your stats and a minimap.</p>
+                <p><strong>Drive:</strong> <span class="font-numeric">↑</span> <span class="font-numeric">↓</span>
+                    or <strong>W</strong> / <strong>S</strong> — gas and brake. <span class="font-numeric">←</span>
+                    <span class="font-numeric">→</span> or <strong>A</strong> / <strong>D</strong> — steer.
+                    <strong>Space</strong> — handbrake. On phones, use the on-screen pedals and steering.</p>
+                <p><strong>Scavenge:</strong> Roll over <strong>scrap</strong>, <strong>fuel</strong> barrels, and
+                    <strong>circuits</strong> to heal, refuel, and recharge (extras go in the <strong>trunk</strong>).
+                    Find <strong>engines, tires, cars, exhausts, radiators,</strong> and <strong>batteries</strong> in
+                    the world; when you touch one, a swap window opens — <strong>E</strong> to install,
+                    <strong>Esc</strong> to keep what you have.</p>
+                <p><strong>Roadside stops:</strong> Pull into <strong>garages</strong> (almost stopped) to repair and
+                    refill slowly. <strong>L</strong> toggles headlights.</p>
+                <p><strong>Towing:</strong> Park with your <strong>rear</strong> near an <strong>abandoned car</strong>
+                    and press <strong>T</strong> to hook up (slow speed). Press <strong>T</strong> again to drop it.
+                    Drag it onto <strong>garage</strong>, <strong>parking</strong>, or <strong>concrete</strong> at a
+                    stop for a scrap payout.</p>
+                <p class="how-to-play-note">Your game is saved automatically when you leave the page. You can also use
+                    <strong>Save Game</strong> in the panel.</p>
+            </div>
+            <button type="button" id="howToPlayDismissBtn" class="how-to-play-dismiss">Got it — let’s drive</button>
+        </div>
     </div>
 
     <!-- Add Game Over overlay -->
@@ -216,6 +257,8 @@
         const CAR_DRAG_COASTING = 0.018;
         /** Only while towing; normal driving has no artificial top speed cap. */
         const TOW_SPEED_CAP = 3 * 0.8;
+        /** Ms per −1 vehicle battery while moving at battery efficiency 1 (higher part efficiency drains faster). */
+        const BATTERY_DRAIN_MS_BASE = 20000;
 
         // -----------------------------------------------------------------
         // ATMOSPHERE (roadmap: fog, wasteland grade, terrain wear, ambient BGM)
@@ -472,8 +515,35 @@
             return results;
         }
 
+        function howToPlayModalIsOpen() {
+            const el = document.getElementById('howToPlayOverlay');
+            return el && !el.hidden;
+        }
+
+        function showHowToPlayModal() {
+            const el = document.getElementById('howToPlayOverlay');
+            if (!el) return;
+            el.hidden = false;
+            const btn = document.getElementById('howToPlayDismissBtn');
+            if (btn) requestAnimationFrame(() => btn.focus());
+        }
+
+        function dismissHowToPlayModal() {
+            const el = document.getElementById('howToPlayOverlay');
+            if (!el) return;
+            el.hidden = true;
+        }
+
         // Handle keyboard input
         window.addEventListener('keydown', (e) => {
+            if (howToPlayModalIsOpen()) {
+                if (e.key === 'Escape') {
+                    dismissHowToPlayModal();
+                    e.preventDefault();
+                }
+                return;
+            }
+
             gameState.keys[e.key] = true;
 
             // Handle one-time key presses here
@@ -644,7 +714,7 @@
 
             // Battery drain while driving
             if (Math.abs(gameState.car.speed) > 0.1) {
-                const batteryDrainInterval = 10000 / (batterySystem?.current?.efficiency || 1);
+                const batteryDrainInterval = BATTERY_DRAIN_MS_BASE / (batterySystem?.current?.efficiency || 1);
                 if (now - gameState.car.lastBatteryUse >= batteryDrainInterval) {
                     if (gameState.car.battery > 0) {
                         gameState.car.battery -= 1;
@@ -1882,6 +1952,14 @@
             document.getElementById('loadingOverlay').style.display = 'none';
             requestAnimationFrame(() => resizeCanvas());
             bindAtmosphereAmbientOnFirstGesture();
+
+            showHowToPlayModal();
+
+            const howBtn = document.getElementById('howToPlayDismissBtn');
+            if (howBtn && !howBtn.dataset.bound) {
+                howBtn.dataset.bound = '1';
+                howBtn.addEventListener('click', dismissHowToPlayModal);
+            }
         };
 
         // Update loadImages function

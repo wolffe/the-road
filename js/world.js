@@ -2,7 +2,7 @@ const TILE_SIZE = 80;
 const CHUNK_SIZE = 32;
 const ROAD_HALF_WIDTH = 2;
 /** Average tile gap along the road between structure anchor points (larger = farther apart). */
-const STRUCTURE_SPACING = 20;
+const STRUCTURE_SPACING = 200;
 /** Random offset along Y per segment, as multiple of STRUCTURE_SPACING (4 → ±2× spacing). */
 const STRUCTURE_JITTER_IN_SPACING = 4;
 const CHUNK_LOAD_RADIUS = 3;
